@@ -1,4 +1,5 @@
 mod codex;
+mod codex_host;
 mod models;
 
 use std::{
@@ -13,17 +14,69 @@ use models::{ProviderSnapshot, WidgetPreferences};
 use tauri::{
     menu::{CheckMenuItem, Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Manager, State, WindowEvent,
+    AppHandle, Emitter, Listener, Manager, Runtime, State, WindowEvent,
 };
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
-use tauri_plugin_window_state::Builder as WindowStateBuilder;
 
-struct AppState {
+pub(crate) struct AppState {
     client: reqwest::Client,
-    preferences: Mutex<WidgetPreferences>,
+    pub(crate) preferences: Mutex<WidgetPreferences>,
+    pub(crate) layout_lock: Mutex<()>,
     preferences_path: PathBuf,
     fetch_lock: tokio::sync::Mutex<()>,
     snapshot_cache: Mutex<Option<(Instant, Vec<ProviderSnapshot>)>>,
+}
+
+const TRAY_LANGUAGE_CHANGED_EVENT: &str = "tray-language-changed";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct TrayLabels {
+    show_panel: &'static str,
+    refresh: &'static str,
+    unlock: &'static str,
+    language: &'static str,
+    autostart: &'static str,
+    quit: &'static str,
+}
+
+fn tray_labels(language: &str) -> TrayLabels {
+    if language == "en" {
+        TrayLabels {
+            show_panel: "Show quota panel",
+            refresh: "Refresh now",
+            unlock: "Unlock widget",
+            language: "Switch to Chinese",
+            autostart: "Start at login",
+            quit: "Quit",
+        }
+    } else {
+        TrayLabels {
+            show_panel: "显示额度面板",
+            refresh: "立即刷新",
+            unlock: "解锁悬浮窗",
+            language: "切换到英文",
+            autostart: "开机启动",
+            quit: "退出",
+        }
+    }
+}
+
+fn apply_tray_labels<R: Runtime>(
+    labels: TrayLabels,
+    show_panel: &CheckMenuItem<R>,
+    refresh: &MenuItem<R>,
+    unlock: &MenuItem<R>,
+    language: &MenuItem<R>,
+    autostart: &CheckMenuItem<R>,
+    quit: &MenuItem<R>,
+) -> tauri::Result<()> {
+    show_panel.set_text(labels.show_panel)?;
+    refresh.set_text(labels.refresh)?;
+    unlock.set_text(labels.unlock)?;
+    language.set_text(labels.language)?;
+    autostart.set_text(labels.autostart)?;
+    quit.set_text(labels.quit)?;
+    Ok(())
 }
 
 async fn fetch_snapshots_uncached(state: &State<'_, AppState>) -> Vec<ProviderSnapshot> {
@@ -54,10 +107,11 @@ fn load_preferences(path: &PathBuf) -> WidgetPreferences {
 
 fn persist_preferences(path: &PathBuf, value: &WidgetPreferences) -> Result<(), String> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|_| "failed to create settings directory".to_string())?;
+        fs::create_dir_all(parent)
+            .map_err(|_| "failed to create settings directory".to_string())?;
     }
-    let serialized = serde_json::to_vec_pretty(value)
-        .map_err(|_| "failed to serialize settings".to_string())?;
+    let serialized =
+        serde_json::to_vec_pretty(value).map_err(|_| "failed to serialize settings".to_string())?;
     let temporary = path.with_extension("json.tmp");
     let backup = path.with_extension("json.bak");
     let mut file = fs::File::create(&temporary)
@@ -131,15 +185,99 @@ fn get_preferences(state: State<'_, AppState>) -> Result<WidgetPreferences, Stri
 #[tauri::command]
 fn set_preferences(
     preferences: WidgetPreferences,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let preferences = preferences.normalized();
-    persist_preferences(&state.preferences_path, &preferences)?;
-    *state
+    let mut current = state
         .preferences
         .lock()
-        .map_err(|_| "settings unavailable".to_string())? = preferences;
+        .map_err(|_| "settings unavailable".to_string())?;
+    let mut preferences = preferences.normalized();
+    // Expanded/collapsed mode is a native window transaction. Generic settings
+    // saves must not resize it or overwrite a concurrent native toggle.
+    preferences.expanded = current.expanded;
+    let language_changed = preferences.language != current.language;
+    persist_preferences(&state.preferences_path, &preferences)?;
+    *current = preferences.clone();
+    drop(current);
+    if language_changed {
+        let _ = app.emit(TRAY_LANGUAGE_CHANGED_EVENT, preferences.language);
+    }
     Ok(())
+}
+
+#[tauri::command]
+fn set_widget_expanded(
+    expanded: bool,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<WidgetPreferences, String> {
+    let _layout_guard = state
+        .layout_lock
+        .lock()
+        .map_err(|_| "window layout unavailable".to_string())?;
+    let mut preferences = state
+        .preferences
+        .lock()
+        .map_err(|_| "settings unavailable".to_string())?;
+    let previous = preferences.clone();
+    if previous.expanded == expanded {
+        codex_host::apply_expanded(&app, expanded)?;
+        return Ok(previous);
+    }
+
+    let mut next = previous.clone();
+    next.expanded = expanded;
+    codex_host::apply_expanded(&app, expanded)?;
+    if persist_preferences(&state.preferences_path, &next).is_err() {
+        return match codex_host::apply_expanded(&app, previous.expanded) {
+            Ok(()) => Err("failed to save panel size; previous layout restored".to_string()),
+            Err(_) => Err(
+                "failed to save panel size and restore the previous layout; reopen the widget"
+                    .to_string(),
+            ),
+        };
+    }
+
+    *preferences = next.clone();
+    drop(preferences);
+    let _ = app.emit_to("widget", "preferences-changed", next.clone());
+    Ok(next)
+}
+
+fn apply_panel_visibility(app: &AppHandle, visible: bool) {
+    if let Some(window) = app.get_webview_window("widget") {
+        if visible {
+            #[cfg(not(windows))]
+            let _ = window.show();
+        } else {
+            let _ = window.hide();
+        }
+    }
+}
+
+fn update_panel_visibility(app: &AppHandle, visible: bool) -> Result<WidgetPreferences, String> {
+    let state = app
+        .try_state::<AppState>()
+        .ok_or_else(|| "settings unavailable".to_string())?;
+    let mut preferences = state
+        .preferences
+        .lock()
+        .map_err(|_| "settings unavailable".to_string())?;
+    let previous = preferences.clone();
+    let mut next = previous.clone();
+    next.panel_visible = visible;
+    persist_preferences(&state.preferences_path, &next)?;
+    *preferences = next.clone();
+    drop(preferences);
+    apply_panel_visibility(app, visible);
+    let _ = app.emit_to("widget", "preferences-changed", next.clone());
+    Ok(next)
+}
+
+#[tauri::command]
+fn set_panel_visible(visible: bool, app: AppHandle) -> Result<WidgetPreferences, String> {
+    update_panel_visibility(&app, visible)
 }
 
 fn apply_lock(app: &AppHandle, locked: bool) -> Result<(), String> {
@@ -206,22 +344,38 @@ fn set_widget_always_on_top(
 }
 
 fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
-    let show = MenuItem::with_id(app, "show", "Show / Hide", true, None::<&str>)?;
-    let refresh = MenuItem::with_id(app, "refresh", "Refresh now", true, None::<&str>)?;
-    let unlock = MenuItem::with_id(app, "unlock", "Unlock widget", true, None::<&str>)?;
-    let pin = MenuItem::with_id(app, "pin", "Pin / Unpin Codex", true, None::<&str>)?;
-    let language = MenuItem::with_id(app, "language", "Switch Language / 切换语言", true, None::<&str>)?;
+    let (panel_visible, initial_language) = app
+        .state::<AppState>()
+        .preferences
+        .lock()
+        .map(|prefs| (prefs.panel_visible, prefs.language.clone()))
+        .unwrap_or_else(|_| (true, "zh-CN".into()));
+    let labels = tray_labels(&initial_language);
+    let show_panel = CheckMenuItem::with_id(
+        app,
+        "show_panel",
+        labels.show_panel,
+        true,
+        panel_visible,
+        None::<&str>,
+    )?;
+    let refresh = MenuItem::with_id(app, "refresh", labels.refresh, true, None::<&str>)?;
+    let unlock = MenuItem::with_id(app, "unlock", labels.unlock, true, None::<&str>)?;
+    let language = MenuItem::with_id(app, "language", labels.language, true, None::<&str>)?;
     let autostart_enabled = app.autolaunch().is_enabled().unwrap_or(false);
     let autostart = CheckMenuItem::with_id(
         app,
         "autostart",
-        "Start at login",
+        labels.autostart,
         true,
         autostart_enabled,
         None::<&str>,
     )?;
-    let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show, &refresh, &unlock, &pin, &language, &autostart, &quit])?;
+    let quit = MenuItem::with_id(app, "quit", labels.quit, true, None::<&str>)?;
+    let menu = Menu::with_items(
+        app,
+        &[&show_panel, &refresh, &unlock, &language, &autostart, &quit],
+    )?;
     let mut builder = TrayIconBuilder::with_id("main")
         .menu(&menu)
         .tooltip("Quota Float");
@@ -229,16 +383,50 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
         builder = builder.icon(icon.clone());
     }
     let autostart_menu = autostart.clone();
+    let show_panel_menu = show_panel.clone();
+    let show_panel_click_menu = show_panel.clone();
+    let show_panel_label = show_panel.clone();
+    let refresh_label = refresh.clone();
+    let unlock_label = unlock.clone();
+    let language_label = language.clone();
+    let autostart_label = autostart.clone();
+    let quit_label = quit.clone();
+    app.listen(TRAY_LANGUAGE_CHANGED_EVENT, move |event| {
+        let Ok(language) = serde_json::from_str::<String>(event.payload()) else {
+            return;
+        };
+        if apply_tray_labels(
+            tray_labels(&language),
+            &show_panel_label,
+            &refresh_label,
+            &unlock_label,
+            &language_label,
+            &autostart_label,
+            &quit_label,
+        )
+        .is_err()
+        {
+            eprintln!("tray language update failed");
+        }
+    });
     builder
         .on_menu_event(move |app, event| match event.id.as_ref() {
-            "show" => {
-                if let Some(window) = app.get_webview_window("widget") {
-                    if window.is_visible().unwrap_or(false) {
-                        let _ = window.hide();
-                    } else {
-                        let _ = window.show();
-                        let _ = window.set_focus();
+            "show_panel" => {
+                let visible = app
+                    .try_state::<AppState>()
+                    .and_then(|state| {
+                        state
+                            .preferences
+                            .lock()
+                            .ok()
+                            .map(|prefs| !prefs.panel_visible)
+                    })
+                    .unwrap_or(true);
+                match update_panel_visibility(app, visible) {
+                    Ok(_) => {
+                        let _ = show_panel_menu.set_checked(visible);
                     }
+                    Err(_) => eprintln!("panel visibility update failed"),
                 }
             }
             "refresh" => {
@@ -254,31 +442,25 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
                     }
                 }
             }
-            "pin" => {
-                if let Some(state) = app.try_state::<AppState>() {
-                    if let Ok(mut prefs) = state.preferences.lock() {
-                        prefs.pinned_provider = if prefs.pinned_provider.is_some() {
-                            None
-                        } else {
-                            Some("codex".into())
-                        };
-                        let _ = persist_preferences(&state.preferences_path, &prefs);
-                        let _ = app.emit_to("widget", "preferences-changed", prefs.clone());
-                    }
-                }
-            }
             "language" => {
                 if let Some(state) = app.try_state::<AppState>() {
-                    if let Ok(mut prefs) = state.preferences.lock() {
-                        prefs.language = if prefs.language == "en" {
+                    let updated = state.preferences.lock().ok().and_then(|mut prefs| {
+                        let mut next = prefs.clone();
+                        next.language = if next.language == "en" {
                             "zh-CN".into()
                         } else {
                             "en".into()
                         };
-                        let normalized = prefs.clone().normalized();
-                        *prefs = normalized.clone();
-                        let _ = persist_preferences(&state.preferences_path, &normalized);
-                        let _ = app.emit_to("widget", "preferences-changed", normalized);
+                        let next = next.normalized();
+                        persist_preferences(&state.preferences_path, &next).ok()?;
+                        *prefs = next.clone();
+                        Some(next)
+                    });
+                    if let Some(updated) = updated {
+                        let _ = app.emit(TRAY_LANGUAGE_CHANGED_EVENT, updated.language.clone());
+                        let _ = app.emit_to("widget", "preferences-changed", updated);
+                    } else {
+                        eprintln!("language update failed");
                     }
                 }
             }
@@ -300,6 +482,18 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
             "quit" => app.exit(0),
             _ => {}
         })
+        .on_tray_icon_event(move |tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                if update_panel_visibility(tray.app_handle(), true).is_ok() {
+                    let _ = show_panel_click_menu.set_checked(true);
+                }
+            }
+        })
         .build(app)?;
     Ok(())
 }
@@ -307,16 +501,12 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
-            if let Some(window) = app.get_webview_window("widget") {
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
+            let _ = update_panel_visibility(app, true);
         }))
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
             None,
         ))
-        .plugin(WindowStateBuilder::default().build())
         .setup(|app| {
             let data_dir = app.path().app_config_dir()?;
             let preferences_path = data_dir.join("preferences.json");
@@ -324,12 +514,13 @@ pub fn run() {
             let client = reqwest::Client::builder()
                 .timeout(Duration::from_secs(12))
                 .redirect(reqwest::redirect::Policy::none())
-                .user_agent("QuotaFloat/0.1")
+                .user_agent(concat!("QuotaFloat/", env!("CARGO_PKG_VERSION")))
                 .build()
                 .expect("static HTTP client configuration must be valid");
             app.manage(AppState {
                 client,
                 preferences: Mutex::new(preferences.clone()),
+                layout_lock: Mutex::new(()),
                 preferences_path,
                 fetch_lock: tokio::sync::Mutex::new(()),
                 snapshot_cache: Mutex::new(None),
@@ -344,8 +535,13 @@ pub fn run() {
                 let _ = apply_lock(app.handle(), true);
             }
             if let Some(window) = app.get_webview_window("widget") {
-                let _ = window.set_always_on_top(preferences.always_on_top);
+                let _ = window.set_always_on_top(false);
             }
+            if codex_host::apply_expanded(app.handle(), preferences.expanded).is_err() {
+                eprintln!("initial widget layout failed");
+            }
+            apply_panel_visibility(app.handle(), preferences.panel_visible);
+            codex_host::start(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -353,22 +549,11 @@ pub fn run() {
             refresh_snapshots,
             get_preferences,
             set_preferences,
+            set_widget_expanded,
+            set_panel_visible,
             set_widget_locked,
             set_widget_always_on_top
         ])
-        .on_tray_icon_event(|app, event| {
-            if let TrayIconEvent::Click {
-                button: MouseButton::Left,
-                button_state: MouseButtonState::Up,
-                ..
-            } = event
-            {
-                if let Some(window) = app.get_webview_window("widget") {
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                }
-            }
-        })
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
@@ -382,4 +567,38 @@ pub fn run() {
             let _ = app_handle.emit_to("widget", "refresh-requested", ());
         }
     });
+}
+
+#[cfg(test)]
+mod tray_label_tests {
+    use super::{tray_labels, TrayLabels};
+
+    #[test]
+    fn returns_english_tray_labels() {
+        assert_eq!(
+            tray_labels("en"),
+            TrayLabels {
+                show_panel: "Show quota panel",
+                refresh: "Refresh now",
+                unlock: "Unlock widget",
+                language: "Switch to Chinese",
+                autostart: "Start at login",
+                quit: "Quit",
+            }
+        );
+    }
+
+    #[test]
+    fn returns_chinese_tray_labels_and_uses_them_as_the_fallback() {
+        let expected = TrayLabels {
+            show_panel: "显示额度面板",
+            refresh: "立即刷新",
+            unlock: "解锁悬浮窗",
+            language: "切换到英文",
+            autostart: "开机启动",
+            quit: "退出",
+        };
+        assert_eq!(tray_labels("zh-CN"), expected);
+        assert_eq!(tray_labels("unsupported"), expected);
+    }
 }

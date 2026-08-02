@@ -16,8 +16,8 @@ macOS 包使用 Universal 构建，同时支持 Apple Silicon 和 Intel Mac。
 推送 `v*` tag 会触发 `.github/workflows/release.yml`，构建 Windows unsigned 包和 macOS Universal unsigned 包，并上传到草稿 GitHub Release。
 
 ```bash
-git tag v0.1.8
-git push origin v0.1.8
+git tag v0.1.9
+git push origin v0.1.9
 ```
 
 两个平台都会先独立构建和上传。只有 Windows 与 macOS 产物全部完成并通过内容检查后，工作流才会生成 SHA-256 校验文件并创建一个草稿 Release。工作流不会自动公开发布；完成安装检查后，仍需在 GitHub Releases 中人工确认并发布。

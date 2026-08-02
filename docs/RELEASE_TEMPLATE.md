@@ -1,4 +1,4 @@
-# Quota Float 0.1.8
+# Quota Float 0.1.9
 
 Quota Float is a lightweight floating desktop widget for checking Codex quota from the local Codex Desktop login state.
 
@@ -10,6 +10,8 @@ Quota Float is a lightweight floating desktop widget for checking Codex quota fr
 
 ## What's new
 
+- Localizes runtime error notices in Chinese and English, including live language changes while an error is visible.
+- Updates every tray menu label immediately when the language changes without resetting checked states.
 - Adds a top-left compact button that switches directly between the 320x320 expanded panel and the 100x100 compact panel.
 - Keeps both visual states ready so the native window and interface change together without a visible resize-then-move sequence.
 - Persists the selected panel mode and keeps rapid toggles serialized.

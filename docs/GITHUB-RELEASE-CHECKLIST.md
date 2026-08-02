@@ -50,8 +50,8 @@ git push origin main
 推送 `v*` tag 会触发 release workflow：
 
 ```bash
-git tag v0.1.8
-git push origin v0.1.8
+git tag v0.1.9
+git push origin v0.1.9
 ```
 
 Windows 与 macOS 均构建、检查成功后，工作流才会创建一个 draft release。附件应包含：

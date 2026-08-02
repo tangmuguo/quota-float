@@ -92,6 +92,30 @@ describe("panel mode transaction", () => {
     await waitFor(() => expect(document.activeElement).toBe(expand));
   });
 
+  it("shows resize failures in the current language and updates an existing notice after a language event", async () => {
+    let onPreferences: ((value: WidgetPreferences) => void) | undefined;
+    bridge.listenDesktopEvents.mockImplementation(async (handlers: { onPreferences: (value: WidgetPreferences) => void }) => {
+      onPreferences = handlers.onPreferences;
+      return () => undefined;
+    });
+    bridge.setWidgetExpanded.mockRejectedValue("failed to save panel size; previous layout restored");
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Collapse quota panel" }));
+    expect(await screen.findByText("Panel size change failed. The previous layout was kept.")).toBeTruthy();
+
+    act(() => onPreferences?.({ ...preferences, language: "zh-CN" }));
+    expect(await screen.findByText("额度面板尺寸切换失败，已保留之前的布局。")).toBeTruthy();
+    expect(screen.queryByText("Panel size change failed. The previous layout was kept.")).toBeNull();
+  });
+
+  it("uses Chinese defaults when settings cannot be read", async () => {
+    bridge.getPreferences.mockRejectedValue("settings unavailable");
+    render(<App />);
+
+    expect(await screen.findByText("无法读取设置，已使用默认设置。")).toBeTruthy();
+  });
+
   it("keeps both mode controls available while quota data is loading", async () => {
     bridge.fetchSnapshots.mockReturnValue(new Promise(() => undefined));
     bridge.setWidgetExpanded.mockResolvedValue({ ...preferences, expanded: false });

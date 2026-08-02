@@ -8,12 +8,19 @@ import type { ProviderSnapshot, WidgetPreferences } from "./types";
 
 const DEFAULT_PREFS: WidgetPreferences = { locked: false, panelVisible: true, expanded: true, alwaysOnTop: true, pinnedProvider: null, autoRotateSeconds: 12, language: "zh-CN" };
 
+type OperationErrorKey =
+  | "settingsReadFailed"
+  | "desktopEventsFailed"
+  | "settingsSaveFailed"
+  | "panelResizeReopenFailed"
+  | "panelResizeFailed";
+
 export default function App() {
   const [snapshots, setSnapshots] = useState<ProviderSnapshot[]>([]);
   const [preferences, setPreferences] = useState(DEFAULT_PREFS);
   const [activeIndex, setActiveIndex] = useState(0);
   const [consumingProviders, setConsumingProviders] = useState<Set<string>>(() => new Set());
-  const [operationError, setOperationError] = useState<string | null>(null);
+  const [operationError, setOperationError] = useState<OperationErrorKey | null>(null);
   const [resizing, setResizing] = useState(false);
   const failures = useRef(0);
   const resizeInFlight = useRef(false);
@@ -22,6 +29,7 @@ export default function App() {
   const consumptionTimers = useRef(new Map<string, number>());
   const language = normalizeLanguage(preferences.language);
   const t = copy[language];
+  const operationErrorMessage = operationError ? t[operationError] : null;
 
   const refresh = useCallback(async (force = false) => {
     try {
@@ -58,7 +66,7 @@ export default function App() {
     void getPreferences().then((value) => {
       const next = { ...DEFAULT_PREFS, ...value, language: normalizeLanguage(value.language) };
       setPreferences(next);
-    }).catch(() => setOperationError("Unable to read settings. Defaults are in use."));
+    }).catch(() => setOperationError("settingsReadFailed"));
     return () => { for (const timer of consumptionTimers.current.values()) window.clearTimeout(timer); consumptionTimers.current.clear(); };
   }, [refresh]);
 
@@ -70,7 +78,7 @@ export default function App() {
       setPreferences(next);
     }, onRefresh: () => void refresh(true) }).then((value) => {
       if (cancelled) value(); else cleanup = value;
-    }).catch(() => setOperationError("Desktop event listener failed to start."));
+    }).catch(() => setOperationError("desktopEventsFailed"));
     return () => { cancelled = true; cleanup(); };
   }, [refresh]);
 
@@ -109,7 +117,7 @@ export default function App() {
     const previous = preferences;
     setPreferences(next);
     setOperationError(null);
-    void updatePreferences(next).catch(() => { setPreferences(previous); setOperationError("Settings could not be saved. Previous state restored."); });
+    void updatePreferences(next).catch(() => { setPreferences(previous); setOperationError("settingsSaveFailed"); });
   }, [preferences]);
 
   useEffect(() => {
@@ -136,9 +144,7 @@ export default function App() {
       .catch((error) => {
         focusAfterResize.current = !expanded;
         const needsReopen = String(error).includes("reopen the widget");
-        setOperationError(needsReopen
-          ? "Panel size change failed. Reopen the widget to restore its layout."
-          : "Panel size change failed. The previous layout was kept.");
+        setOperationError(needsReopen ? "panelResizeReopenFailed" : "panelResizeFailed");
       })
       .finally(() => {
         resizeInFlight.current = false;
@@ -152,14 +158,14 @@ export default function App() {
         <div className="widget-view widget-view--expanded">
           <div className="loading-card" aria-label={t.loadingQuota} aria-busy="true">
             <button type="button" className="panel-resize-button" onClick={() => changeExpanded(false)} disabled={resizing} aria-label={t.collapsePanel} title={t.collapsePanel}>−</button>
-            {operationError ? <p className="operation-notice" role="status">{operationError}</p> : null}
+            {operationErrorMessage ? <p className="operation-notice" role="status">{operationErrorMessage}</p> : null}
             <span /><span /><span />
           </div>
         </div>
         <div className="widget-view widget-view--compact">
           <div className="quota-orb loading-orb" aria-label={t.loadingQuota} aria-busy="true">
             <button type="button" className="panel-resize-button orb-resize-button" onClick={() => changeExpanded(true)} disabled={resizing} aria-label={t.expandPanel} title={t.expandPanel}>+</button>
-            {operationError ? <span className="orb-operation-notice" role="status" aria-label={operationError} title={operationError}>!</span> : null}
+            {operationErrorMessage ? <span className="orb-operation-notice" role="status" aria-label={operationErrorMessage} title={operationErrorMessage}>!</span> : null}
             <span /><span /><span />
           </div>
         </div>
@@ -181,7 +187,7 @@ export default function App() {
           onHover={() => {}}
           onRefresh={() => refresh(true)}
           isConsuming={consumingProviders.has(current.provider)}
-          notice={operationError}
+          notice={operationErrorMessage}
           onToggleExpanded={() => changeExpanded(false)}
           resizeDisabled={resizing}
         />
@@ -193,7 +199,7 @@ export default function App() {
           onHover={() => {}}
           onToggleExpanded={() => changeExpanded(true)}
           resizeDisabled={resizing}
-          notice={operationError}
+          notice={operationErrorMessage}
           compactActive={!preferences.expanded}
         />
       </div>

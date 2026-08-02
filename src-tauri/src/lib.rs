@@ -14,7 +14,7 @@ use models::{ProviderSnapshot, WidgetPreferences};
 use tauri::{
     menu::{CheckMenuItem, Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Manager, State, WindowEvent,
+    AppHandle, Emitter, Listener, Manager, Runtime, State, WindowEvent,
 };
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 
@@ -25,6 +25,58 @@ pub(crate) struct AppState {
     preferences_path: PathBuf,
     fetch_lock: tokio::sync::Mutex<()>,
     snapshot_cache: Mutex<Option<(Instant, Vec<ProviderSnapshot>)>>,
+}
+
+const TRAY_LANGUAGE_CHANGED_EVENT: &str = "tray-language-changed";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct TrayLabels {
+    show_panel: &'static str,
+    refresh: &'static str,
+    unlock: &'static str,
+    language: &'static str,
+    autostart: &'static str,
+    quit: &'static str,
+}
+
+fn tray_labels(language: &str) -> TrayLabels {
+    if language == "en" {
+        TrayLabels {
+            show_panel: "Show quota panel",
+            refresh: "Refresh now",
+            unlock: "Unlock widget",
+            language: "Switch to Chinese",
+            autostart: "Start at login",
+            quit: "Quit",
+        }
+    } else {
+        TrayLabels {
+            show_panel: "显示额度面板",
+            refresh: "立即刷新",
+            unlock: "解锁悬浮窗",
+            language: "切换到英文",
+            autostart: "开机启动",
+            quit: "退出",
+        }
+    }
+}
+
+fn apply_tray_labels<R: Runtime>(
+    labels: TrayLabels,
+    show_panel: &CheckMenuItem<R>,
+    refresh: &MenuItem<R>,
+    unlock: &MenuItem<R>,
+    language: &MenuItem<R>,
+    autostart: &CheckMenuItem<R>,
+    quit: &MenuItem<R>,
+) -> tauri::Result<()> {
+    show_panel.set_text(labels.show_panel)?;
+    refresh.set_text(labels.refresh)?;
+    unlock.set_text(labels.unlock)?;
+    language.set_text(labels.language)?;
+    autostart.set_text(labels.autostart)?;
+    quit.set_text(labels.quit)?;
+    Ok(())
 }
 
 async fn fetch_snapshots_uncached(state: &State<'_, AppState>) -> Vec<ProviderSnapshot> {
@@ -133,6 +185,7 @@ fn get_preferences(state: State<'_, AppState>) -> Result<WidgetPreferences, Stri
 #[tauri::command]
 fn set_preferences(
     preferences: WidgetPreferences,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let mut current = state
@@ -143,8 +196,13 @@ fn set_preferences(
     // Expanded/collapsed mode is a native window transaction. Generic settings
     // saves must not resize it or overwrite a concurrent native toggle.
     preferences.expanded = current.expanded;
+    let language_changed = preferences.language != current.language;
     persist_preferences(&state.preferences_path, &preferences)?;
-    *current = preferences;
+    *current = preferences.clone();
+    drop(current);
+    if language_changed {
+        let _ = app.emit(TRAY_LANGUAGE_CHANGED_EVENT, preferences.language);
+    }
     Ok(())
 }
 
@@ -286,39 +344,34 @@ fn set_widget_always_on_top(
 }
 
 fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
-    let panel_visible = app
+    let (panel_visible, initial_language) = app
         .state::<AppState>()
         .preferences
         .lock()
-        .map(|prefs| prefs.panel_visible)
-        .unwrap_or(true);
+        .map(|prefs| (prefs.panel_visible, prefs.language.clone()))
+        .unwrap_or_else(|_| (true, "zh-CN".into()));
+    let labels = tray_labels(&initial_language);
     let show_panel = CheckMenuItem::with_id(
         app,
         "show_panel",
-        "Show quota panel / 显示额度面板",
+        labels.show_panel,
         true,
         panel_visible,
         None::<&str>,
     )?;
-    let refresh = MenuItem::with_id(app, "refresh", "Refresh now", true, None::<&str>)?;
-    let unlock = MenuItem::with_id(app, "unlock", "Unlock widget", true, None::<&str>)?;
-    let language = MenuItem::with_id(
-        app,
-        "language",
-        "Switch Language / 切换语言",
-        true,
-        None::<&str>,
-    )?;
+    let refresh = MenuItem::with_id(app, "refresh", labels.refresh, true, None::<&str>)?;
+    let unlock = MenuItem::with_id(app, "unlock", labels.unlock, true, None::<&str>)?;
+    let language = MenuItem::with_id(app, "language", labels.language, true, None::<&str>)?;
     let autostart_enabled = app.autolaunch().is_enabled().unwrap_or(false);
     let autostart = CheckMenuItem::with_id(
         app,
         "autostart",
-        "Start at login",
+        labels.autostart,
         true,
         autostart_enabled,
         None::<&str>,
     )?;
-    let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", labels.quit, true, None::<&str>)?;
     let menu = Menu::with_items(
         app,
         &[&show_panel, &refresh, &unlock, &language, &autostart, &quit],
@@ -332,6 +385,30 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
     let autostart_menu = autostart.clone();
     let show_panel_menu = show_panel.clone();
     let show_panel_click_menu = show_panel.clone();
+    let show_panel_label = show_panel.clone();
+    let refresh_label = refresh.clone();
+    let unlock_label = unlock.clone();
+    let language_label = language.clone();
+    let autostart_label = autostart.clone();
+    let quit_label = quit.clone();
+    app.listen(TRAY_LANGUAGE_CHANGED_EVENT, move |event| {
+        let Ok(language) = serde_json::from_str::<String>(event.payload()) else {
+            return;
+        };
+        if apply_tray_labels(
+            tray_labels(&language),
+            &show_panel_label,
+            &refresh_label,
+            &unlock_label,
+            &language_label,
+            &autostart_label,
+            &quit_label,
+        )
+        .is_err()
+        {
+            eprintln!("tray language update failed");
+        }
+    });
     builder
         .on_menu_event(move |app, event| match event.id.as_ref() {
             "show_panel" => {
@@ -367,16 +444,23 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
             }
             "language" => {
                 if let Some(state) = app.try_state::<AppState>() {
-                    if let Ok(mut prefs) = state.preferences.lock() {
-                        prefs.language = if prefs.language == "en" {
+                    let updated = state.preferences.lock().ok().and_then(|mut prefs| {
+                        let mut next = prefs.clone();
+                        next.language = if next.language == "en" {
                             "zh-CN".into()
                         } else {
                             "en".into()
                         };
-                        let normalized = prefs.clone().normalized();
-                        *prefs = normalized.clone();
-                        let _ = persist_preferences(&state.preferences_path, &normalized);
-                        let _ = app.emit_to("widget", "preferences-changed", normalized);
+                        let next = next.normalized();
+                        persist_preferences(&state.preferences_path, &next).ok()?;
+                        *prefs = next.clone();
+                        Some(next)
+                    });
+                    if let Some(updated) = updated {
+                        let _ = app.emit(TRAY_LANGUAGE_CHANGED_EVENT, updated.language.clone());
+                        let _ = app.emit_to("widget", "preferences-changed", updated);
+                    } else {
+                        eprintln!("language update failed");
                     }
                 }
             }
@@ -483,4 +567,38 @@ pub fn run() {
             let _ = app_handle.emit_to("widget", "refresh-requested", ());
         }
     });
+}
+
+#[cfg(test)]
+mod tray_label_tests {
+    use super::{tray_labels, TrayLabels};
+
+    #[test]
+    fn returns_english_tray_labels() {
+        assert_eq!(
+            tray_labels("en"),
+            TrayLabels {
+                show_panel: "Show quota panel",
+                refresh: "Refresh now",
+                unlock: "Unlock widget",
+                language: "Switch to Chinese",
+                autostart: "Start at login",
+                quit: "Quit",
+            }
+        );
+    }
+
+    #[test]
+    fn returns_chinese_tray_labels_and_uses_them_as_the_fallback() {
+        let expected = TrayLabels {
+            show_panel: "显示额度面板",
+            refresh: "立即刷新",
+            unlock: "解锁悬浮窗",
+            language: "切换到英文",
+            autostart: "开机启动",
+            quit: "退出",
+        };
+        assert_eq!(tray_labels("zh-CN"), expected);
+        assert_eq!(tray_labels("unsupported"), expected);
+    }
 }

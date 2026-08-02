@@ -1,5 +1,7 @@
 # Quota Float
 
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 Lightweight floating desktop widget for checking Codex quota from the local Codex Desktop login state.
 
 ![Quota Float quota states](docs/images/quota-states.png)
@@ -47,7 +49,7 @@ Browser preview uses mock data. Real quota reading requires the Tauri desktop ap
 
 For normal users, download the latest unsigned build from GitHub Releases:
 
-- Latest release: https://github.com/change-42-yhmm/quota-float/releases/latest
+- Latest release: https://github.com/Gavinnn102/quota-float/releases/latest
 - Windows: `quota-float-windows-unsigned.zip`
 - macOS Universal: `quota-float-macos-universal-unsigned.zip`
 
@@ -57,7 +59,7 @@ Unzip it and run the app. Unsigned builds may trigger Windows SmartScreen or mac
 
 Please use GitHub Issues for bugs, compatibility reports, and feature requests:
 
-https://github.com/change-42-yhmm/quota-float/issues
+https://github.com/Gavinnn102/quota-float/issues
 
 ## Privacy Boundary
 

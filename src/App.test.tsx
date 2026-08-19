@@ -20,8 +20,6 @@ const preferences: WidgetPreferences = {
   locked: false,
   panelVisible: true,
   expanded: true,
-  alwaysOnTop: true,
-  position: null,
   pinnedProvider: null,
   autoRotateSeconds: 12,
   language: "en",

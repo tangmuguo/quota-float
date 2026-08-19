@@ -2,11 +2,6 @@ export type ProviderId = "codex" | "claude";
 export type SnapshotStatus = "ok" | "stale" | "loading" | "unavailable" | "signed_out";
 export type Language = "zh-CN" | "en";
 
-export interface WidgetPosition {
-  x: number;
-  y: number;
-}
-
 export interface UsageWindow {
   remainingPercent: number;
   resetsAt: string | null;
@@ -29,8 +24,6 @@ export interface WidgetPreferences {
   locked: boolean;
   panelVisible: boolean;
   expanded: boolean;
-  alwaysOnTop: boolean;
-  position: WidgetPosition | null;
   pinnedProvider: ProviderId | null;
   autoRotateSeconds: number;
   language: Language;

@@ -15,6 +15,8 @@
 *.msi
 *.dmg
 *.app
+!/src-tauri/gnome-extension/quota-float-anchor@quotafloat.app/
+!/src-tauri/gnome-extension/quota-float-anchor@quotafloat.app/**
 *.zip
 *.tar.gz
 *.pdb

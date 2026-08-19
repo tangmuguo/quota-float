@@ -10,7 +10,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use models::{ProviderSnapshot, WidgetPosition, WidgetPreferences};
+use models::{ProviderSnapshot, WidgetPreferences};
 use tauri::{
     menu::{CheckMenuItem, Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -33,7 +33,6 @@ const TRAY_LANGUAGE_CHANGED_EVENT: &str = "tray-language-changed";
 struct TrayLabels {
     show_panel: &'static str,
     refresh: &'static str,
-    dock: &'static str,
     unlock: &'static str,
     language: &'static str,
     autostart: &'static str,
@@ -43,7 +42,6 @@ struct TrayLabels {
 struct TrayMenuItems<R: Runtime> {
     show_panel: CheckMenuItem<R>,
     refresh: MenuItem<R>,
-    dock: MenuItem<R>,
     unlock: MenuItem<R>,
     language: MenuItem<R>,
     autostart: CheckMenuItem<R>,
@@ -55,7 +53,6 @@ fn tray_labels(language: &str) -> TrayLabels {
         TrayLabels {
             show_panel: "Show quota panel",
             refresh: "Refresh now",
-            dock: "Move to bottom right",
             unlock: "Unlock widget",
             language: "Switch to Chinese",
             autostart: "Start at login",
@@ -65,7 +62,6 @@ fn tray_labels(language: &str) -> TrayLabels {
         TrayLabels {
             show_panel: "显示额度面板",
             refresh: "立即刷新",
-            dock: "移动至右下角",
             unlock: "解锁悬浮窗",
             language: "切换到英文",
             autostart: "开机启动",
@@ -80,7 +76,6 @@ fn apply_tray_labels<R: Runtime>(
 ) -> tauri::Result<()> {
     items.show_panel.set_text(labels.show_panel)?;
     items.refresh.set_text(labels.refresh)?;
-    items.dock.set_text(labels.dock)?;
     items.unlock.set_text(labels.unlock)?;
     items.language.set_text(labels.language)?;
     items.autostart.set_text(labels.autostart)?;
@@ -202,10 +197,9 @@ fn set_preferences(
         .lock()
         .map_err(|_| "settings unavailable".to_string())?;
     let mut preferences = preferences.normalized();
-    // Layout and placement are native window transactions. Generic settings
-    // saves must not overwrite a concurrent resize or a user-positioned widget.
+    // Expanded/collapsed mode is a native window transaction. Generic settings
+    // saves must not overwrite a concurrent native toggle.
     preferences.expanded = current.expanded;
-    preferences.position = current.position.clone();
     let language_changed = preferences.language != current.language;
     persist_preferences(&state.preferences_path, &preferences)?;
     *current = preferences.clone();
@@ -226,22 +220,29 @@ fn set_widget_expanded(
         .layout_lock
         .lock()
         .map_err(|_| "window layout unavailable".to_string())?;
+    // Do not keep the preferences mutex while sending GTK a size request.
+    // On Wayland, configure notifications can re-enter application code; the
+    // previous implementation held this lock across resize + move and could
+    // leave the one-shot resize command waiting indefinitely.
+    let previous = state
+        .preferences
+        .lock()
+        .map_err(|_| "settings unavailable".to_string())?
+        .clone();
+    if previous.expanded == expanded {
+        ubuntu_host::apply_expanded(&app, expanded)?;
+        return Ok(previous);
+    }
+
+    ubuntu_host::apply_expanded(&app, expanded)?;
     let mut preferences = state
         .preferences
         .lock()
         .map_err(|_| "settings unavailable".to_string())?;
-    let previous = preferences.clone();
-    if previous.expanded == expanded {
-        ubuntu_host::apply_expanded(&app, expanded, previous.position.clone())?;
-        return Ok(previous);
-    }
-
-    let mut next = previous.clone();
+    let mut next = preferences.clone();
     next.expanded = expanded;
-    ubuntu_host::apply_expanded(&app, expanded, next.position.clone())?;
     if persist_preferences(&state.preferences_path, &next).is_err() {
-        return match ubuntu_host::apply_expanded(&app, previous.expanded, previous.position.clone())
-        {
+        return match ubuntu_host::apply_expanded(&app, previous.expanded) {
             Ok(()) => Err("failed to save panel size; previous layout restored".to_string()),
             Err(_) => Err(
                 "failed to save panel size and restore the previous layout; reopen the widget"
@@ -259,12 +260,9 @@ fn set_widget_expanded(
 fn apply_panel_visibility(app: &AppHandle, visible: bool) {
     if let Some(window) = app.get_webview_window("widget") {
         if visible {
-            let _ = window.unminimize();
             let _ = window.show();
         } else {
-            // Ubuntu does not guarantee that every GNOME session exposes an
-            // AppIndicator. Keep a taskbar entry available as a recovery path.
-            let _ = window.minimize();
+            let _ = window.hide();
         }
     }
 }
@@ -291,73 +289,6 @@ fn update_panel_visibility(app: &AppHandle, visible: bool) -> Result<WidgetPrefe
 #[tauri::command]
 fn set_panel_visible(visible: bool, app: AppHandle) -> Result<WidgetPreferences, String> {
     update_panel_visibility(&app, visible)
-}
-
-#[tauri::command]
-fn start_widget_drag(app: AppHandle) -> Result<(), String> {
-    let window = app
-        .get_webview_window("widget")
-        .ok_or_else(|| "widget window missing".to_string())?;
-    window
-        .start_dragging()
-        .map_err(|_| "failed to start widget drag".to_string())
-}
-
-#[tauri::command]
-fn save_widget_position(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
-    let _layout_guard = state
-        .layout_lock
-        .lock()
-        .map_err(|_| "window layout unavailable".to_string())?;
-    let window = app
-        .get_webview_window("widget")
-        .ok_or_else(|| "widget window missing".to_string())?;
-    let position = window
-        .outer_position()
-        .map_err(|_| "widget position unavailable".to_string())?;
-    let mut preferences = state
-        .preferences
-        .lock()
-        .map_err(|_| "settings unavailable".to_string())?;
-    let mut next = preferences.clone();
-    next.position = Some(WidgetPosition {
-        x: position.x,
-        y: position.y,
-    });
-    persist_preferences(&state.preferences_path, &next)?;
-    *preferences = next;
-    Ok(())
-}
-
-fn dock_widget_bottom_right(app: &AppHandle) -> Result<WidgetPreferences, String> {
-    let state = app
-        .try_state::<AppState>()
-        .ok_or_else(|| "settings unavailable".to_string())?;
-    let _layout_guard = state
-        .layout_lock
-        .lock()
-        .map_err(|_| "window layout unavailable".to_string())?;
-    let mut preferences = state
-        .preferences
-        .lock()
-        .map_err(|_| "settings unavailable".to_string())?;
-    let previous = preferences.clone();
-    let mut next = previous.clone();
-    next.position = None;
-    ubuntu_host::apply_expanded(app, next.expanded, None)?;
-    if persist_preferences(&state.preferences_path, &next).is_err() {
-        return match ubuntu_host::apply_expanded(app, previous.expanded, previous.position.clone())
-        {
-            Ok(()) => Err("failed to save widget position; previous layout restored".to_string()),
-            Err(_) => {
-                Err("failed to save widget position and restore the previous layout".to_string())
-            }
-        };
-    }
-    *preferences = next.clone();
-    drop(preferences);
-    let _ = app.emit_to("widget", "preferences-changed", next.clone());
-    Ok(next)
 }
 
 fn apply_lock(app: &AppHandle, locked: bool) -> Result<(), String> {
@@ -394,36 +325,6 @@ fn set_widget_locked(
     Ok(next)
 }
 
-#[tauri::command]
-fn set_widget_always_on_top(
-    always_on_top: bool,
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> Result<WidgetPreferences, String> {
-    let previous = state
-        .preferences
-        .lock()
-        .map_err(|_| "settings unavailable".to_string())?
-        .clone();
-    let mut next = previous.clone();
-    next.always_on_top = always_on_top;
-    persist_preferences(&state.preferences_path, &next)?;
-    let window = app
-        .get_webview_window("widget")
-        .ok_or_else(|| "widget window missing".to_string())?;
-    if let Err(error) = window.set_always_on_top(always_on_top) {
-        let _ = persist_preferences(&state.preferences_path, &previous);
-        return Err(format!("failed to toggle always-on-top: {error}"));
-    }
-    let _ = window.set_visible_on_all_workspaces(always_on_top);
-    *state
-        .preferences
-        .lock()
-        .map_err(|_| "settings unavailable".to_string())? = next.clone();
-    let _ = app.emit_to("widget", "preferences-changed", next.clone());
-    Ok(next)
-}
-
 fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
     let (panel_visible, initial_language) = app
         .state::<AppState>()
@@ -441,7 +342,6 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
         None::<&str>,
     )?;
     let refresh = MenuItem::with_id(app, "refresh", labels.refresh, true, None::<&str>)?;
-    let dock = MenuItem::with_id(app, "dock", labels.dock, true, None::<&str>)?;
     let unlock = MenuItem::with_id(app, "unlock", labels.unlock, true, None::<&str>)?;
     let language = MenuItem::with_id(app, "language", labels.language, true, None::<&str>)?;
     let autostart_enabled = app.autolaunch().is_enabled().unwrap_or(false);
@@ -456,15 +356,7 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
     let quit = MenuItem::with_id(app, "quit", labels.quit, true, None::<&str>)?;
     let menu = Menu::with_items(
         app,
-        &[
-            &show_panel,
-            &refresh,
-            &dock,
-            &unlock,
-            &language,
-            &autostart,
-            &quit,
-        ],
+        &[&show_panel, &refresh, &unlock, &language, &autostart, &quit],
     )?;
     let mut builder = TrayIconBuilder::with_id("main")
         .menu(&menu)
@@ -478,7 +370,6 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
     let label_items = TrayMenuItems {
         show_panel: show_panel.clone(),
         refresh: refresh.clone(),
-        dock: dock.clone(),
         unlock: unlock.clone(),
         language: language.clone(),
         autostart: autostart.clone(),
@@ -514,11 +405,6 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
             }
             "refresh" => {
                 let _ = app.emit_to("widget", "refresh-requested", ());
-            }
-            "dock" => {
-                if dock_widget_bottom_right(app).is_err() {
-                    eprintln!("widget placement update failed");
-                }
             }
             "unlock" => {
                 let _ = apply_lock(app, false);
@@ -614,29 +500,24 @@ pub fn run() {
                 snapshot_cache: Mutex::new(None),
             });
             if setup_tray(app).is_err() {
-                eprintln!("tray setup failed; enabling taskbar fallback");
-                if let Some(window) = app.get_webview_window("widget") {
-                    let _ = window.set_skip_taskbar(false);
-                }
+                eprintln!("tray setup failed");
             }
             if preferences.locked {
                 let _ = apply_lock(app.handle(), true);
             }
             if let Some(window) = app.get_webview_window("widget") {
-                let _ = window.set_skip_taskbar(false);
-                let _ = window.set_always_on_top(preferences.always_on_top);
-                let _ = window.set_visible_on_all_workspaces(preferences.always_on_top);
+                // The Shell extension owns stacking and workspace affinity so
+                // the widget stays with ChatGPT instead of becoming a desktop
+                // overlay when another application is focused.
+                let _ = window.set_skip_taskbar(true);
+                let _ = window.set_always_on_top(false);
+                let _ = window.set_visible_on_all_workspaces(false);
             }
-            if ubuntu_host::apply_expanded(
-                app.handle(),
-                preferences.expanded,
-                preferences.position.clone(),
-            )
-            .is_err()
-            {
+            if ubuntu_host::apply_expanded(app.handle(), preferences.expanded).is_err() {
                 eprintln!("initial widget layout failed");
             }
             apply_panel_visibility(app.handle(), preferences.panel_visible);
+            ubuntu_host::start();
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -646,15 +527,12 @@ pub fn run() {
             set_preferences,
             set_widget_expanded,
             set_panel_visible,
-            start_widget_drag,
-            save_widget_position,
-            set_widget_locked,
-            set_widget_always_on_top
+            set_widget_locked
         ])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
-                let _ = window.minimize();
+                let _ = window.hide();
             }
         })
         .build(tauri::generate_context!())
@@ -677,7 +555,6 @@ mod tray_label_tests {
             TrayLabels {
                 show_panel: "Show quota panel",
                 refresh: "Refresh now",
-                dock: "Move to bottom right",
                 unlock: "Unlock widget",
                 language: "Switch to Chinese",
                 autostart: "Start at login",
@@ -691,7 +568,6 @@ mod tray_label_tests {
         let expected = TrayLabels {
             show_panel: "显示额度面板",
             refresh: "立即刷新",
-            dock: "移动至右下角",
             unlock: "解锁悬浮窗",
             language: "切换到英文",
             autostart: "开机启动",

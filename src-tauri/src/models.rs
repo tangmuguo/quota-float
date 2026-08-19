@@ -40,32 +40,18 @@ impl ProviderSnapshot {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct WidgetPosition {
-    pub x: i32,
-    pub y: i32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct WidgetPreferences {
     pub locked: bool,
     #[serde(default = "default_panel_visible")]
     pub panel_visible: bool,
     #[serde(default = "default_expanded")]
     pub expanded: bool,
-    #[serde(default = "default_always_on_top")]
-    pub always_on_top: bool,
-    #[serde(default)]
-    pub position: Option<WidgetPosition>,
     pub pinned_provider: Option<String>,
     pub auto_rotate_seconds: u64,
     #[serde(default = "default_language")]
     pub language: String,
 }
 
-fn default_always_on_top() -> bool {
-    true
-}
 fn default_panel_visible() -> bool {
     true
 }
@@ -82,8 +68,6 @@ impl Default for WidgetPreferences {
             locked: false,
             panel_visible: true,
             expanded: true,
-            always_on_top: true,
-            position: None,
             pinned_provider: None,
             auto_rotate_seconds: 12,
             language: default_language(),
@@ -117,6 +101,5 @@ mod tests {
 
         assert!(preferences.panel_visible);
         assert!(preferences.expanded);
-        assert!(preferences.position.is_none());
     }
 }

@@ -20,12 +20,12 @@
         "minHeight": 100,
         "maxWidth": 320,
         "maxHeight": 320,
-        "resizable": false,
+        "resizable": true,
         "decorations": false,
         "transparent": true,
-        "alwaysOnTop": true,
-        "visibleOnAllWorkspaces": true,
-        "skipTaskbar": false,
+        "alwaysOnTop": false,
+        "visibleOnAllWorkspaces": false,
+        "skipTaskbar": true,
         "shadow": false,
         "visible": false
       }
@@ -37,7 +37,7 @@
     "targets": "deb",
     "category": "Utility",
     "shortDescription": "Codex quota at a glance for Ubuntu 26.04",
-    "longDescription": "A lightweight, always-on-top Ubuntu desktop widget for Codex usage limits.",
+    "longDescription": "A lightweight Ubuntu widget anchored to the ChatGPT desktop window for Codex usage limits.",
     "copyright": "Copyright Quota Float contributors",
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png"],
     "linux": {
@@ -46,8 +46,13 @@
           "libwebkit2gtk-4.1-0 (>= 2.52)",
           "libgtk-3-0t64",
           "libayatana-appindicator3-1",
-          "xwayland"
-        ]
+          "gnome-shell (>= 48)"
+        ],
+        "files": {
+          "/usr/share/gnome-shell/extensions/quota-float-anchor@quotafloat.app/metadata.json": "gnome-extension/quota-float-anchor@quotafloat.app/metadata.json",
+          "/usr/share/gnome-shell/extensions/quota-float-anchor@quotafloat.app/extension.js": "gnome-extension/quota-float-anchor@quotafloat.app/extension.js",
+          "/usr/share/gnome-shell/extensions/quota-float-anchor@quotafloat.app/anchor.js": "gnome-extension/quota-float-anchor@quotafloat.app/anchor.js"
+        }
       }
     }
   }

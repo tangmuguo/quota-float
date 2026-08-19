@@ -81,7 +81,10 @@ jobs:
           dpkg-deb --field "$package" Depends | grep -Fq 'libwebkit2gtk-4.1-0'
           dpkg-deb --field "$package" Depends | grep -Fq 'libgtk-3-0t64'
           dpkg-deb --field "$package" Depends | grep -Fq 'libayatana-appindicator3-1'
-          dpkg-deb --field "$package" Depends | grep -Fq 'xwayland'
+          dpkg-deb --field "$package" Depends | grep -Fq 'gnome-shell (>= 48)'
+          dpkg-deb --contents "$package" | grep -Fq '/usr/share/gnome-shell/extensions/quota-float-anchor@quotafloat.app/metadata.json'
+          dpkg-deb --contents "$package" | grep -Fq '/usr/share/gnome-shell/extensions/quota-float-anchor@quotafloat.app/extension.js'
+          dpkg-deb --contents "$package" | grep -Fq '/usr/share/gnome-shell/extensions/quota-float-anchor@quotafloat.app/anchor.js'
           for needle in "$GITHUB_WORKSPACE" "$HOME"; do
             if strings -a "$package" | grep -Fq "$needle"; then
               echo "Release package contains a local build path"

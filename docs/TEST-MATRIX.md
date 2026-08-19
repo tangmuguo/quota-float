@@ -6,15 +6,12 @@
 | 数据 | 未登录、过期、401/403/429、断网 | 不泄露响应或 Token；显示安全错误并按退避策略重试 | 解析/快照单元测试覆盖；待桌面验证 |
 | 登录态 | `CODEX_HOME/auth.json` | 可读取自定义 Codex 目录中的登录态 | 待实机验证 |
 | 登录态 | `~/.codex/auth.json` | 可读取默认 Codex 登录态 | 待实机验证 |
-| GNOME Wayland | 原生 Wayland 会话 | WebView 可点击、透明窗口可用、置顶可用；合成器决定初始位置 | 待实机验证 |
-| GNOME Wayland | 手动拖动 | 拖动完整面板标题区或圆球后，坐标可报告时下次启动恢复 | 待实机验证 |
-| Xorg/XWayland | 右下角定位 | 初次启动、收起/展开、托盘重置位置均贴靠工作区右下角 | Rust 几何单元测试覆盖；待实机验证 |
-| 多显示器 | 混合缩放、负坐标、移除显示器 | 记忆位置选择对应显示器并钳制在可见工作区 | Rust 几何单元测试覆盖；待实机验证 |
-| 面板 | 320 × 320 / 100 × 100 切换 | 原生尺寸与前端视图同步切换；快速点击被串行化 | 前端单元测试覆盖；待实机验证 |
-| 任务栏 | 关闭或隐藏组件 | 最小化而非孤立隐藏；可由 Dock、活动概览或再次启动恢复 | 待实机验证 |
-| AppIndicator | Ubuntu Desktop 带指示器扩展 | 显示/最小化、刷新、右下角定位、解锁、语言、自启动和退出可用 | 待实机验证 |
-| 自启动 | XDG autostart | 登录后启动，组件与托盘/任务栏均可恢复 | 待实机验证 |
-| 构建 | Ubuntu 26.04 `.deb` | 只生成一个 `.deb`，声明 WebKitGTK、GTK t64、Ayatana 与 XWayland 依赖 | CI/release 配置已覆盖 |
+| GNOME Wayland | 原生 Wayland 会话 | Shell 扩展启用后，组件贴靠活动 ChatGPT 窗口右下角；WebView 可点击、透明窗口可用 | 待实机验证 |
+| GNOME Shell | ChatGPT 移动、缩放、最小化、恢复和工作区切换 | 组件跟随窗口；ChatGPT 不在前台时不残留为桌面中间的独立悬浮窗 | 待实机验证 |
+| 面板 | 320 × 320 / 100 × 100 切换 | 原生尺寸先更新，扩展再按已更新的 frame 重新锚定；快速点击被串行化且不会卡死 | 前端/Rust 单元测试覆盖；待实机验证 |
+| AppIndicator | Ubuntu Desktop 带指示器扩展 | 显示/隐藏、刷新、解锁、语言、自启动和退出可用 | 待实机验证 |
+| 自启动 | XDG autostart | 登录后启动，扩展会在 ChatGPT 前台时重新锚定组件 | 待实机验证 |
+| 构建 | Ubuntu 26.04 `.deb` | 只生成一个 `.deb`，声明 WebKitGTK、GTK t64、Ayatana、GNOME Shell 依赖，并包含扩展文件 | CI/release 配置已覆盖 |
 | 安装 | `sudo apt install ./package.deb` | 依赖可解析、桌面启动器可用、升级不丢失用户配置 | 待实机验证 |
 | 隐私 | 源码和 `.deb` 扫描 | 无 Token、账号 ID、原始响应、本机构建路径或开发产物 | release workflow 覆盖；待产物验证 |
 
@@ -22,6 +19,6 @@
 
 - 前端测试、前端构建、Rust 测试和 Clippy 通过。
 - Ubuntu 26.04 CI 成功生成 `.deb`。
-- 在 Ubuntu 26.04 GNOME Wayland 与 Xorg/XWayland 分别完成安装、刷新、定位、拖动、托盘/任务栏恢复和自启动检查。
+- 在 Ubuntu 26.04 GNOME Wayland 完成安装、扩展启用、刷新、ChatGPT 窗口锚定、缩放、托盘恢复和自启动检查。
 - `.deb` 的依赖、版本、SHA-256 和内容扫描通过。
 - 严重和高风险问题清零。

@@ -67,8 +67,6 @@ html[data-mock-widget-size="compact"] .widget-view--compact { display: block; }
 @keyframes drift { to { transform: translate3d(5%, 4%, 0) scale(1.16) rotate(2deg); } }
 
 .card-header { min-height: 48px; display: flex; align-items: flex-start; justify-content: space-between; padding-left: 18px; }
-.widget-drag-region, .quota-orb { cursor: grab; }
-.widget-drag-region:active, .quota-orb:active { cursor: grabbing; }
 .eyebrow, .updated, .weekly-metric p, .weekly-metric span, .reset-time { margin: 0; }
 .eyebrow, .updated, .weekly-metric, .reset-time { text-shadow: 0 1px 8px rgba(60,70,96,.18); }
 .eyebrow { font-size: 14px; font-weight: 600; letter-spacing: .18em; }
@@ -159,7 +157,6 @@ html[data-mock-widget-size="compact"] .widget-view--compact { display: block; }
   -webkit-backdrop-filter: blur(14px) saturate(1.18);
   transition: opacity .2s ease, background-color .2s ease, backdrop-filter .2s ease, -webkit-backdrop-filter .2s ease;
 }
-.quota-orb button { cursor: pointer; }
 .quota-orb--idle {
   opacity: .7;
   background: rgba(237,243,248,.68);

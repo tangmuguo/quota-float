@@ -51,13 +51,13 @@ git push origin v0.1.9
 2. 可选：在下载目录执行 `sha256sum -c SHA256SUMS.txt`。
 3. 使用 `sudo apt install ./quota-float_<version>_amd64.deb` 安装，不要只使用 `dpkg -i`。
 4. 在同一台电脑登录 Codex 后，从应用列表启动 Quota Float Ubuntu。
-5. GNOME Wayland 下如初始位置不在右下角，可拖动组件；托盘菜单可请求恢复右下角位置。
+5. 确认 `quota-float-anchor@quotafloat.app` 已启用，并在 ChatGPT 前台时将组件锚定到其右下角。
 
 ## 发布前确认
 
 - [ ] 前端测试和 Web build 通过。
 - [ ] Rust 测试和 Clippy 通过。
 - [ ] Ubuntu 26.04 `.deb` 已生成且依赖字段正确。
-- [ ] GNOME Wayland 与 Xorg/XWayland 均完成安装和窗口行为检查。
-- [ ] 任务栏恢复、AppIndicator（若可用）、开机启动和语言切换已验证。
+- [ ] GNOME Wayland 完成安装、扩展启用和 ChatGPT 窗口行为检查。
+- [ ] 显示/隐藏、AppIndicator（若可用）、开机启动和语言切换已验证。
 - [ ] 版本一致性、包内容、SHA-256 和隐私扫描通过。

@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-An Ubuntu 26.04 desktop widget that reads the existing local Codex login state and shows the remaining Codex quota at a glance.
+An Ubuntu 26.04 widget that reads the existing local Codex login state and shows the remaining Codex quota in the lower-right corner of the ChatGPT desktop window.
 
 ![Quota Float quota states](docs/images/quota-states.png)
 
@@ -10,17 +10,17 @@ An Ubuntu 26.04 desktop widget that reads the existing local Codex login state a
 
 - Targets Ubuntu 26.04 LTS on x86_64 and ships as a native Debian package (`.deb`).
 - Uses the Ubuntu/GTK runtime stack (`WebKitGTK 4.1`, GTK 3 t64, Ayatana AppIndicator) instead of an AppImage.
-- Requests a 24 px bottom-right work-area placement on launch and whenever the panel changes size. It is exact on Ubuntu on Xorg/XWayland.
-- Keeps the Wayland-native WebKit path on GNOME Wayland. GNOME intentionally controls client window placement there, so the widget provides a drag region and remembers a reported position instead of forcing an unstable XWayland fallback.
-- Starts as an always-on-top, all-workspaces widget and keeps a normal taskbar entry, so the panel can be restored even when a GNOME session does not expose an AppIndicator.
-- Includes a tray action to move the widget back to the bottom-right corner, refresh quota, unlock click-through, switch language, configure login autostart, and quit.
+- Uses a packaged GNOME Shell extension to anchor the widget 24 px from the active ChatGPT window's lower-right corner. This works in the native GNOME Wayland session instead of relying on a client-side position request that Mutter can reject.
+- Follows the ChatGPT window as it moves, resizes, changes workspace, minimizes, and restores. The widget is not a free-floating all-workspaces desktop overlay.
+- Changes panel size in a size-only native transaction. The Shell extension moves the already-resized frame on its next compositor tick, avoiding the resize-and-reposition hang seen on Wayland.
+- Includes tray controls for show/hide, refresh, unlock click-through, switch language, configure login autostart, and quit.
 
 ## What it shows
 
 - Codex plan, weekly remaining quota, next reset time, and reset-credit information when the service provides it.
 - Healthy, caution, critical, stale, signed-out, and unavailable states.
 - A 320 × 320 full panel and a 100 × 100 compact quota orb.
-- Persistent preferences for panel size, visibility, click-through, always-on-top behavior, language, and a user-positioned location.
+- Persistent preferences for panel size, visibility, click-through behavior, language, and provider rotation.
 
 ## Install
 
@@ -30,15 +30,19 @@ Download the Ubuntu 26.04 `.deb` from the release page, then install it with `ap
 sudo apt install ./quota-float_*_amd64.deb
 ```
 
-Sign in to Codex on the same machine before starting Quota Float. If the widget is minimized or an indicator is not visible, launch **Quota Float Ubuntu** again from the dock or Activities overview to restore it.
+Sign in to Codex on the same machine first. After the initial `.deb` install or an extension update, log out and back in once so GNOME Shell can scan the system extension, then start Quota Float; the app enables it for the current user. If it was disabled manually, restore it with:
 
-The package declares the Ubuntu 26.04 runtime dependencies it needs, including `libwebkit2gtk-4.1-0`, `libgtk-3-0t64`, `libayatana-appindicator3-1`, and `xwayland`.
+```bash
+gnome-extensions enable quota-float-anchor@quotafloat.app
+```
+
+The package declares the Ubuntu 26.04 runtime dependencies it needs, including `libwebkit2gtk-4.1-0`, `libgtk-3-0t64`, `libayatana-appindicator3-1`, and GNOME Shell 48 or newer.
 
 ## Placement on GNOME Wayland
 
-Wayland compositors do not let regular applications dictate an exact screen coordinate. Quota Float therefore requests the lower-right placement and remains usable if GNOME chooses a different initial position.
+Wayland correctly prevents an ordinary app from embedding itself in another app or forcing an arbitrary screen coordinate. Quota Float therefore delegates only this placement task to its small, local GNOME Shell extension. The extension identifies the Quota Float and ChatGPT desktop windows, then moves the existing Quota Float frame to the ChatGPT frame's lower-right corner. It neither reads window contents nor uses network access.
 
-To place it yourself, drag the heading area of the full panel or the compact orb. The app remembers the reported position when the session supports it. Use **Move to bottom right / 移动至右下角** in the tray menu to clear that remembered position and request the default placement again.
+The widget is visible while ChatGPT is the active desktop app (or while you interact with the widget itself), follows panel size changes automatically, and hides with ChatGPT rather than remaining in the middle of the desktop. GNOME Shell versions 48–50 are supported by the bundled extension.
 
 ## How it works
 
@@ -63,11 +67,9 @@ sudo apt install \
   curl \
   wget \
   file \
-  libxdo-dev \
   libssl-dev \
   libayatana-appindicator3-dev \
-  librsvg2-dev \
-  xwayland
+  librsvg2-dev
 ```
 
 Then install Node.js 20+, Rust stable, and project dependencies:

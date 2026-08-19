@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-一款面向 Ubuntu 26.04 的 Codex 额度桌面悬浮组件。它读取本机现有的 Codex 登录状态，在桌面右下角附近显示剩余额度。
+一款面向 Ubuntu 26.04 的 Codex 额度悬浮组件。它读取本机现有的 Codex 登录状态，并将剩余额度显示在 ChatGPT 桌面版窗口的右下角。
 
 ![Quota Float 配额状态](docs/images/quota-states.png)
 
@@ -10,17 +10,17 @@
 
 - 仅面向 x86_64 的 Ubuntu 26.04 LTS，发布原生 Debian 安装包（`.deb`）。
 - 使用 Ubuntu 的 GTK 运行时栈：WebKitGTK 4.1、GTK 3 t64、Ayatana AppIndicator；不发布 AppImage。
-- 启动和切换面板尺寸时，请求定位到可用工作区右下角 24 px 边距处；在 Ubuntu Xorg/XWayland 下可精确定位。
-- GNOME Wayland 下保留原生 Wayland WebKit 路径，不为定位而强制 XWayland。GNOME 本身决定顶层窗口位置，因此组件提供拖动定位和位置记忆。
-- 默认置顶并显示在所有工作区，同时保留任务栏入口；即使当前 GNOME 会话未显示 AppIndicator，也可以恢复窗口。
-- 托盘菜单提供右下角定位、刷新额度、解除鼠标穿透、语言切换、开机启动和退出操作。
+- 通过随 `.deb` 安装的 GNOME Shell 扩展，在合成器层把组件固定在当前 ChatGPT 桌面版窗口右下角 24 px 边距处；原生 GNOME Wayland 不再依赖会被 Mutter 拒绝的客户端坐标请求。
+- 跟随 ChatGPT 窗口的移动、缩放、工作区切换、最小化和恢复；组件不是跨工作区、始终覆盖桌面的独立悬浮窗。
+- 面板缩放只执行原生尺寸切换，扩展在下一次合成器刷新中移动已缩放后的窗口，避免 Wayland 下“缩放 + 定位”导致的卡死。
+- 托盘菜单提供显示/隐藏、刷新额度、解除鼠标穿透、语言切换、开机启动和退出操作。
 
 ## 显示内容
 
 - Codex 套餐、本周剩余额度、下次重置时间，以及接口提供时的重置机会信息。
 - 正常、提醒、紧急、过期、未登录和暂不可用等状态。
 - 320 × 320 完整面板和 100 × 100 紧凑额度圆球。
-- 持久保存面板尺寸、显示状态、鼠标穿透、置顶、语言和手动位置等偏好。
+- 持久保存面板尺寸、显示状态、鼠标穿透、语言和自动轮换等偏好。
 
 ## 安装
 
@@ -30,15 +30,19 @@
 sudo apt install ./quota-float_*_amd64.deb
 ```
 
-请先在同一台电脑上登录 Codex，再启动 Quota Float。若组件被最小化，或当前桌面没有显示托盘图标，可从 Dock 或“活动概览”再次启动 **Quota Float Ubuntu** 来恢复它。
+请先在同一台电脑上登录 Codex。首次安装或更新 `.deb` 后，请注销并重新登录一次，让 GNOME Shell 扫描系统扩展，再启动 Quota Float；应用随后会为当前用户自动启用它。若曾手动禁用，可执行：
 
-安装包会声明所需的 Ubuntu 26.04 运行时依赖，包括 `libwebkit2gtk-4.1-0`、`libgtk-3-0t64`、`libayatana-appindicator3-1` 和 `xwayland`。
+```bash
+gnome-extensions enable quota-float-anchor@quotafloat.app
+```
+
+安装包会声明所需的 Ubuntu 26.04 运行时依赖，包括 `libwebkit2gtk-4.1-0`、`libgtk-3-0t64`、`libayatana-appindicator3-1` 和 GNOME Shell 48 以上版本。
 
 ## GNOME Wayland 的窗口位置
 
-Wayland 合成器不允许普通应用强制指定屏幕坐标。Quota Float 会请求右下角位置；若 GNOME 决定以其他初始位置显示，组件仍可正常使用。
+Wayland 正确地禁止普通应用嵌入另一个应用窗口，或强制任意屏幕坐标。Quota Float 因此仅把“定位”交给本地 GNOME Shell 扩展：扩展识别 Quota Float 与 ChatGPT 桌面版窗口，把现有的 Quota Float 窗口移动到 ChatGPT 窗口右下角。它不读取窗口内容，也不访问网络。
 
-可拖动完整面板的标题区域，或直接拖动紧凑圆球，将它放到所需位置。桌面会话支持时，应用会记住该位置。使用托盘菜单的 **Move to bottom right / 移动至右下角** 可以清除记忆的位置，并再次请求默认右下角布局。
+组件在 ChatGPT 处于活动状态（或正在与组件交互）时显示；尺寸变化会自动重新锚定，ChatGPT 不在前台时不会留在桌面中央。随包扩展支持 GNOME Shell 48–50。
 
 ## 工作原理
 
@@ -63,11 +67,9 @@ sudo apt install \
   curl \
   wget \
   file \
-  libxdo-dev \
   libssl-dev \
   libayatana-appindicator3-dev \
-  librsvg2-dev \
-  xwayland
+  librsvg2-dev
 ```
 
 再准备 Node.js 20+、Rust stable，并执行：

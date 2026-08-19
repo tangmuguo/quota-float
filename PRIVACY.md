@@ -15,13 +15,13 @@ Quota Float stores only widget preferences in its own application config directo
 - locked state
 - panel visibility
 - expanded or collapsed panel state
-- always-on-top state
-- user-positioned widget coordinates
 - pinned provider
 - auto-rotate interval
 - interface language
 
 It does not copy or persist Codex tokens, account IDs, raw quota responses, user prompts, chat history, or local file paths.
+
+The bundled GNOME Shell extension reads only the application identity and frame geometry of the Quota Float and ChatGPT windows in order to anchor the widget. It does not read either window's content and does not make network requests.
 
 ## What It Sends
 

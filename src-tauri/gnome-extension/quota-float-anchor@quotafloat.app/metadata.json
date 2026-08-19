@@ -1,0 +1,6 @@
+{
+  "uuid": "quota-float-anchor@quotafloat.app",
+  "name": "Quota Float ChatGPT Anchor",
+  "description": "Keeps the Quota Float widget in the lower-right corner of the active ChatGPT desktop window.",
+  "shell-version": ["48", "49", "50"]
+}

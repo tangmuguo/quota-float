@@ -9,7 +9,7 @@ const expectedDependencies = [
   "libwebkit2gtk-4.1-0 (>= 2.52)",
   "libgtk-3-0t64",
   "libayatana-appindicator3-1",
-  "xwayland",
+  "gnome-shell (>= 48)",
 ];
 
 async function run(command, args) {

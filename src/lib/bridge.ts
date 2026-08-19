@@ -1,6 +1,6 @@
 import type { ProviderSnapshot, WidgetPreferences } from "../types";
 
-const defaultPreferences: WidgetPreferences = { locked: false, panelVisible: true, expanded: true, alwaysOnTop: true, position: null, pinnedProvider: null, autoRotateSeconds: 12, language: "zh-CN" };
+const defaultPreferences: WidgetPreferences = { locked: false, panelVisible: true, expanded: true, pinnedProvider: null, autoRotateSeconds: 12, language: "zh-CN" };
 
 const mockSnapshot: ProviderSnapshot = {
   provider: "codex",
@@ -40,12 +40,6 @@ export async function setClickThrough(locked: boolean): Promise<WidgetPreference
   return invoke<WidgetPreferences>("set_widget_locked", { locked });
 }
 
-export async function setAlwaysOnTop(alwaysOnTop: boolean): Promise<WidgetPreferences> {
-  if (!isTauri()) return { ...defaultPreferences, alwaysOnTop };
-  const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<WidgetPreferences>("set_widget_always_on_top", { alwaysOnTop });
-}
-
 export async function setWidgetExpanded(expanded: boolean): Promise<WidgetPreferences> {
   if (!isTauri()) {
     if (expanded) delete document.documentElement.dataset.mockWidgetSize;
@@ -54,18 +48,6 @@ export async function setWidgetExpanded(expanded: boolean): Promise<WidgetPrefer
   }
   const { invoke } = await import("@tauri-apps/api/core");
   return invoke<WidgetPreferences>("set_widget_expanded", { expanded });
-}
-
-export async function startWidgetDrag(): Promise<void> {
-  if (!isTauri()) return;
-  const { invoke } = await import("@tauri-apps/api/core");
-  await invoke("start_widget_drag");
-}
-
-export async function saveWidgetPosition(): Promise<void> {
-  if (!isTauri()) return;
-  const { invoke } = await import("@tauri-apps/api/core");
-  await invoke("save_widget_position");
 }
 
 export async function listenDesktopEvents(handlers: {

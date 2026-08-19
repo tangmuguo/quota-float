@@ -2,7 +2,7 @@
 
 ## 一句话定位
 
-Quota Float 是一个面向 Ubuntu 26.04 的 Tauri 2 悬浮组件。它通过本机已有的 Codex 登录态只读查询额度，并以置顶卡片或紧凑圆球显示每周额度、重置时间、重置机会和会员类型。
+Quota Float 是一个面向 Ubuntu 26.04 的 Tauri 2 额度组件。它通过本机已有的 Codex 登录态只读查询额度，并在 ChatGPT 桌面版窗口右下角以卡片或紧凑圆球显示每周额度、重置时间、重置机会和会员类型。
 
 ## 技术栈
 
@@ -10,25 +10,26 @@ Quota Float 是一个面向 Ubuntu 26.04 的 Tauri 2 悬浮组件。它通过本
 - 桌面壳：Tauri 2、Rust、GTK/WebKitGTK。
 - 网络：Rust `reqwest` 只读调用 ChatGPT 额度接口。
 - 打包：Ubuntu 26.04 原生 Debian (`.deb`) 包。
-- 测试：Vitest 覆盖前端格式化、快照合并和面板状态；Rust 覆盖额度解析与窗口几何。
+- 测试：Vitest 覆盖前端格式化、快照合并和面板状态；Rust 覆盖额度解析、尺寸事务和桌面环境识别。
 
 ## Ubuntu 桌面行为
 
-- 无边框、透明、置顶、默认显示在所有工作区。
-- 请求将 320 × 320 面板或 100 × 100 圆球放在当前工作区右下角；Xorg/XWayland 下精确执行。
-- GNOME Wayland 下遵守合成器的窗口放置策略，标题区域和圆球可拖动定位；会话能够报告坐标时持久保存位置。
-- 关闭或隐藏时最小化到任务栏，而不是只依赖托盘；这适配未显示 AppIndicator 的 GNOME 会话。
-- 托盘菜单支持显示/最小化、刷新、右下角定位、解除鼠标穿透、语言切换、开机启动和退出。
+- 无边框、透明的小组件由 GNOME Shell 扩展锚定到 ChatGPT 桌面版窗口的右下角，而不是作为独立桌面置顶窗显示。
+- 扩展在 Mutter 合成器层读取两个窗口的边框几何，并在 ChatGPT 移动、缩放、切换工作区或恢复时同步组件位置。
+- 320 × 320 面板和 100 × 100 圆球切换只发出尺寸请求；扩展依据实际新尺寸重新锚定，避免客户端 resize + move 竞争。
+- ChatGPT 不在前台时组件最小化；显示/隐藏仍可从托盘操作。
+- 托盘菜单支持显示/隐藏、刷新、解除鼠标穿透、语言切换、开机启动和退出。
 - `tauri-plugin-autostart` 在 Linux 使用 XDG autostart 入口。
 
 ## 关键文件
 
-- `src/App.tsx`：刷新、退避、stale 状态、偏好保存与拖动桥接。
-- `src/components/QuotaCard.tsx`：完整面板、紧凑圆球和 Ubuntu 拖动区域。
+- `src/App.tsx`：刷新、退避、stale 状态、偏好保存与尺寸切换。
+- `src/components/QuotaCard.tsx`：完整面板和紧凑圆球。
 - `src/lib/bridge.ts`：浏览器 mock 与 Tauri command 桥接。
 - `src-tauri/src/codex.rs`：读取本地认证、调用并解析额度接口。
-- `src-tauri/src/ubuntu_host.rs`：工作区右下角布局、多显示器/缩放钳制和 Wayland 容错。
-- `src-tauri/src/lib.rs`：偏好持久化、窗口命令、托盘、自启动、单实例与任务栏恢复。
+- `src-tauri/src/ubuntu_host.rs`：尺寸事务和 GNOME Shell 扩展启用，不再向 Wayland 请求位置。
+- `src-tauri/gnome-extension/`：在 GNOME Shell/Mutter 侧将组件锚定到 ChatGPT 窗口。
+- `src-tauri/src/lib.rs`：偏好持久化、窗口命令、托盘、自启动和单实例恢复。
 - `src-tauri/tauri.conf.json`：Ubuntu 26.04 `.deb` 目标及其运行时依赖。
 - `.github/workflows/*.yml`：在 `ubuntu-26.04` runner 上测试、打包和发布。
 
@@ -51,4 +52,4 @@ npm run tauri dev
 npm run tauri:ubuntu
 ```
 
-浏览器模式只能验证 mock 数据；真实额度、AppIndicator、自动启动、GNOME Wayland/Xorg 定位均需要 Ubuntu 26.04 桌面实机验证。
+浏览器模式只能验证 mock 数据；真实额度、AppIndicator、自动启动和 GNOME Shell 的 ChatGPT 窗口锚定均需要 Ubuntu 26.04 桌面实机验证。

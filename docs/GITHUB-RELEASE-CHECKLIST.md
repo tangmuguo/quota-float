@@ -1,85 +1,63 @@
-# GitHub 发布与分享清单
+# GitHub 发布与分享清单（Ubuntu 26.04）
 
-## 需要提前安装或准备什么
+## 本地准备
 
-本机 Windows 不需要安装 macOS 构建工具，也不能直接构建 macOS 安装包。macOS 包由 GitHub Actions 的 `macos-latest` runner 构建。
+- Ubuntu 26.04 x86_64
+- Git、Node.js 20+、Rust stable
+- Tauri 的 Ubuntu 26.04 开发依赖（见根目录 README）
+- 已通过 `npm ci` 安装前端依赖
 
-本机需要：
-
-- Git
-- Node.js 20+
-- Rust stable
-- npm 依赖已安装
-
-GitHub 需要：
-
-- 一个 GitHub 仓库
-- GitHub Actions 已启用
-- 代码已推送到默认分支
-
-macOS Universal 构建需要的 Rust targets 已经在 CI/release workflow 中自动安装：
-
-```bash
-rustup target add aarch64-apple-darwin x86_64-apple-darwin
-```
-
-你不需要在 Windows 本机安装这两个 target。
+GitHub 需要一个仓库，并启用 GitHub Actions。工作流使用 `ubuntu-26.04` runner，不需要 Windows 或 macOS 构建机。
 
 ## 第一次上传到 GitHub
 
-如果本地仓库还没有 remote，先在 GitHub 创建一个空仓库，然后执行：
+若仓库尚无 remote：
 
 ```bash
 git remote add origin https://github.com/<owner>/<repo>.git
 git branch -M main
 git add .
-git commit -m "Prepare Windows and macOS unsigned release"
+git commit -m "Prepare Ubuntu 26.04 release"
 git push -u origin main
 ```
 
-如果已经有 remote，只需要：
+若已有 remote：
 
 ```bash
 git add .
-git commit -m "Prepare Windows and macOS unsigned release"
+git commit -m "Prepare Ubuntu 26.04 release"
 git push origin main
 ```
 
 ## 生成可分享版本
 
-推送 `v*` tag 会触发 release workflow：
+推送与版本一致的标签：
 
 ```bash
 git tag v0.1.9
 git push origin v0.1.9
 ```
 
-Windows 与 macOS 均构建、检查成功后，工作流才会创建一个 draft release。附件应包含：
+工作流成功后会创建 draft release，附件应包含：
 
-- `quota-float-windows-unsigned.zip`
-- `quota-float-macos-universal-unsigned.zip`
+- 一个 `quota-float_<version>_amd64.deb`
 - `SHA256SUMS.txt`
 
-先核对 SHA-256、版本、隐私扫描，以及两个平台的安装和启动结果。确认无误后才点击 Publish release，然后把 Release 链接发给用户。
+先核对版本、SHA-256、隐私扫描和 Ubuntu 26.04 实机安装结果，再点击 Publish release。
 
-## 发给 Mac 用户时的说明
+## 发给 Ubuntu 用户的安装说明
 
-当前 macOS 包是 unsigned 包。用户首次打开可能会被 Gatekeeper 拦截，可以这样打开：
+1. 下载 `.deb` 和 `SHA256SUMS.txt`。
+2. 可选：在下载目录执行 `sha256sum -c SHA256SUMS.txt`。
+3. 使用 `sudo apt install ./quota-float_<version>_amd64.deb` 安装，不要只使用 `dpkg -i`。
+4. 在同一台电脑登录 Codex 后，从应用列表启动 Quota Float Ubuntu。
+5. GNOME Wayland 下如初始位置不在右下角，可拖动组件；托盘菜单可请求恢复右下角位置。
 
-1. 下载 `quota-float-macos-universal-unsigned.zip`。
-2. 解压后把应用拖到 Applications 或任意测试目录。
-3. 右键点击应用，选择 Open。
-4. 在系统提示里再次选择 Open。
-5. 如果仍被拦截，到 System Settings -> Privacy & Security 里允许打开。
+## 发布前确认
 
-## 以后公开分发还需要什么
-
-如果要面向非技术用户公开分发，建议补：
-
-- Windows 代码签名证书。
-- Apple Developer ID Application 证书。
-- Apple Team ID。
-- Apple app-specific password。
-- GitHub Secrets 中的签名和公证配置。
-
-这些账号、证书和密码不能由代码生成，需要项目所有者申请或购买。
+- [ ] 前端测试和 Web build 通过。
+- [ ] Rust 测试和 Clippy 通过。
+- [ ] Ubuntu 26.04 `.deb` 已生成且依赖字段正确。
+- [ ] GNOME Wayland 与 Xorg/XWayland 均完成安装和窗口行为检查。
+- [ ] 任务栏恢复、AppIndicator（若可用）、开机启动和语言切换已验证。
+- [ ] 版本一致性、包内容、SHA-256 和隐私扫描通过。

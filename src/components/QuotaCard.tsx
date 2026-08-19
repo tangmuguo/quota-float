@@ -20,6 +20,8 @@ interface Props {
   initialShowCreditTip?: boolean;
   onToggleExpanded: () => void;
   resizeDisabled?: boolean;
+  onStartDragging?: () => void;
+  onFinishDragging?: () => void;
 }
 
 function StatusIcon({ status, expired = false }: { status: ProviderSnapshot["status"]; expired?: boolean }) {
@@ -57,6 +59,8 @@ export const QuotaCard = memo(function QuotaCard({
   initialShowCreditTip = false,
   onToggleExpanded,
   resizeDisabled = false,
+  onStartDragging,
+  onFinishDragging,
 }: Props) {
   const [showCreditTip, setShowCreditTip] = useState(initialShowCreditTip);
   const language = normalizeLanguage(preferences.language);
@@ -93,13 +97,22 @@ export const QuotaCard = memo(function QuotaCard({
       </button>
       <span className="sr-only" aria-live="polite">{available && primary !== null ? t.availableLabel(primary) : message}</span>
       {notice ? <p className="operation-notice" role="status">{notice}</p> : null}
-      <header className="card-header">
+      <header
+        className="card-header widget-drag-region"
+        onMouseDown={(event) => {
+          if (event.button === 0) onStartDragging?.();
+        }}
+        onMouseUp={(event) => {
+          if (event.button === 0) onFinishDragging?.();
+        }}
+        title={t.dragToMove}
+      >
         <div>
           <p className="eyebrow">{snapshot.displayName} · {snapshot.plan ?? t.accountFallback}</p>
           {snapshot.status !== "stale" ? <p className="updated">{t.shortRemaining}</p> : null}
         </div>
         {!preferences.locked ? (
-          <nav className="card-actions" aria-label={t.controls} onMouseDown={(event) => event.stopPropagation()}>
+          <nav className="card-actions" aria-label={t.controls} onMouseDown={(event) => event.stopPropagation()} onMouseUp={(event) => event.stopPropagation()}>
             {providerCount > 1 ? <button onClick={onPrevious} aria-label={t.servicePrevious}><ArrowUp /></button> : null}
             {providerCount > 1 ? <button onClick={onNext} aria-label={t.serviceNext}><ArrowDown /></button> : null}
             <span className={`usage-indicator usage-indicator--${indicatorState}`} role="status" aria-label={indicatorLabel} title={indicatorLabel}><i /></span>
@@ -152,7 +165,7 @@ export const QuotaCard = memo(function QuotaCard({
   );
 });
 
-export const QuotaOrb = memo(function QuotaOrb({ snapshot, onHover, onToggleExpanded, resizeDisabled = false, notice = null, language = "zh-CN", compactActive = true }: Pick<Props, "snapshot" | "onHover" | "onToggleExpanded" | "resizeDisabled" | "notice"> & { language?: Language; compactActive?: boolean }) {
+export const QuotaOrb = memo(function QuotaOrb({ snapshot, onHover, onToggleExpanded, resizeDisabled = false, notice = null, language = "zh-CN", compactActive = true, onStartDragging, onFinishDragging }: Pick<Props, "snapshot" | "onHover" | "onToggleExpanded" | "resizeDisabled" | "notice" | "onStartDragging" | "onFinishDragging"> & { language?: Language; compactActive?: boolean }) {
   const [idle, setIdle] = useState(false);
   const idleTimer = useRef<number | null>(null);
   const activeLanguage = normalizeLanguage(language);
@@ -184,10 +197,16 @@ export const QuotaOrb = memo(function QuotaOrb({ snapshot, onHover, onToggleExpa
       className={`quota-orb quota-card--${snapshot.status} quota-card--${tier}${idle ? " quota-orb--idle" : ""}`}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={() => onHover(false)}
+      onMouseDown={(event) => {
+        if (event.button === 0) onStartDragging?.();
+      }}
+      onMouseUp={(event) => {
+        if (event.button === 0) onFinishDragging?.();
+      }}
       aria-label={available ? t.availableLabel(primary) : localizedBackendMessage(snapshot.message, activeLanguage) ?? t.unavailableStatus}
     >
       <div className="aurora" aria-hidden="true" />
-      <button type="button" className="panel-resize-button orb-resize-button" onMouseDown={(event) => event.stopPropagation()} onClick={onToggleExpanded} disabled={resizeDisabled} aria-label={t.expandPanel} title={t.expandPanel}>
+      <button type="button" className="panel-resize-button orb-resize-button" onMouseDown={(event) => event.stopPropagation()} onMouseUp={(event) => event.stopPropagation()} onClick={onToggleExpanded} disabled={resizeDisabled} aria-label={t.expandPanel} title={t.expandPanel}>
         <ArrowsOutSimple weight="bold" />
       </button>
       {notice ? <span className="orb-operation-notice" role="status" aria-label={notice} title={notice}><WarningCircle weight="fill" /></span> : null}

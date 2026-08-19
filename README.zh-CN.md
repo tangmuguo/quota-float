@@ -1,135 +1,114 @@
-# Quota Float
+# Quota Float · Ubuntu 26.04
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-一款轻量级浮动桌面小组件，通过本机 Codex Desktop 的登录状态查看 Codex 配额。
+一款面向 Ubuntu 26.04 的 Codex 额度桌面悬浮组件。它读取本机现有的 Codex 登录状态，在桌面右下角附近显示剩余额度。
 
 ![Quota Float 配额状态](docs/images/quota-states.png)
 
-## 功能亮点
+## 为 Ubuntu 26.04 优化
 
-- 在紧凑的置顶小组件中显示 Codex 套餐、5 小时配额、每周配额和下次重置时间。
-- 使用清晰的正常、提醒和紧急状态表示剩余配额。
-- 可通过左上角按钮在完整面板和小型浮动圆球之间切换。
-- 显示配额当前是否正在消耗。
-- 提供语言切换和窗口置顶快捷控制。
-- 当面板遮挡 Codex 界面时，可隐藏配额面板并从系统托盘恢复；该设置会在重启后保留。
-- 可在 320 × 320 完整面板和 100 × 100 紧凑圆球之间直接切换。在 Windows 上，窗口尺寸和右下角位置会同步更新，所选模式会在重启后保留。
-- 面板保持固定，不显示误导性的拖动光标，也不会启动手动窗口拖动；Windows 上的位置会继续跟随 ChatGPT 主窗口。
-- 当配额服务提供相关数据时，显示重置额度数量及其可用额度的到期时间。
-- 能够处理数据过期、未登录、配额服务不可用和加载中等状态，不会编造配额数值。
+- 仅面向 x86_64 的 Ubuntu 26.04 LTS，发布原生 Debian 安装包（`.deb`）。
+- 使用 Ubuntu 的 GTK 运行时栈：WebKitGTK 4.1、GTK 3 t64、Ayatana AppIndicator；不发布 AppImage。
+- 启动和切换面板尺寸时，请求定位到可用工作区右下角 24 px 边距处；在 Ubuntu Xorg/XWayland 下可精确定位。
+- GNOME Wayland 下保留原生 Wayland WebKit 路径，不为定位而强制 XWayland。GNOME 本身决定顶层窗口位置，因此组件提供拖动定位和位置记忆。
+- 默认置顶并显示在所有工作区，同时保留任务栏入口；即使当前 GNOME 会话未显示 AppIndicator，也可以恢复窗口。
+- 托盘菜单提供右下角定位、刷新额度、解除鼠标穿透、语言切换、开机启动和退出操作。
 
-## 界面截图
+## 显示内容
 
-| 配额状态 | 浮动圆球 | 重置额度到期时间 |
-| --- | --- | --- |
-| ![正常、提醒和紧急配额状态](docs/images/quota-states.png) | ![收起后的配额圆球](docs/images/quota-orb.png) | ![重置额度到期时间弹窗](docs/images/quota-reset-expiration.png) |
+- Codex 套餐、本周剩余额度、下次重置时间，以及接口提供时的重置机会信息。
+- 正常、提醒、紧急、过期、未登录和暂不可用等状态。
+- 320 × 320 完整面板和 100 × 100 紧凑额度圆球。
+- 持久保存面板尺寸、显示状态、鼠标穿透、置顶、语言和手动位置等偏好。
 
-## 仓库信息
+## 安装
 
-建议的仓库简介：
+从 Release 页面下载 Ubuntu 26.04 的 `.deb`，使用 `apt` 安装以自动处理运行时依赖：
 
-```text
-用于通过本机 Codex Desktop 登录状态查看 Codex 配额的 Windows/macOS 浮动桌面小组件。
+```bash
+sudo apt install ./quota-float_*_amd64.deb
 ```
 
-建议的仓库主题：
+请先在同一台电脑上登录 Codex，再启动 Quota Float。若组件被最小化，或当前桌面没有显示托盘图标，可从 Dock 或“活动概览”再次启动 **Quota Float Ubuntu** 来恢复它。
 
-```text
-codex, quota, tauri, react, rust, desktop-app, windows, macos, productivity
-```
+安装包会声明所需的 Ubuntu 26.04 运行时依赖，包括 `libwebkit2gtk-4.1-0`、`libgtk-3-0t64`、`libayatana-appindicator3-1` 和 `xwayland`。
+
+## GNOME Wayland 的窗口位置
+
+Wayland 合成器不允许普通应用强制指定屏幕坐标。Quota Float 会请求右下角位置；若 GNOME 决定以其他初始位置显示，组件仍可正常使用。
+
+可拖动完整面板的标题区域，或直接拖动紧凑圆球，将它放到所需位置。桌面会话支持时，应用会记住该位置。使用托盘菜单的 **Move to bottom right / 移动至右下角** 可以清除记忆的位置，并再次请求默认右下角布局。
 
 ## 工作原理
 
-Quota Float 读取本机已有的 Codex Desktop 登录状态，并使用该会话查询 Codex/ChatGPT 配额接口。它不会根据本地 Token 数量估算用量，也不会使用重置额度或修改账户设置。
+Quota Float 只读取已有的本机登录文件：
 
-浏览器预览模式使用模拟数据。读取真实配额需要运行 Tauri 桌面应用，并且同一台电脑上已经登录 Codex Desktop。
+- 已设置 `CODEX_HOME` 时：`$CODEX_HOME/auth.json`；
+- 否则：`~/.codex/auth.json`。
 
-## 下载与安装
+它仅使用已有会话调用 Codex/ChatGPT 额度接口；不会按本地 Token 数估算额度、兑换重置机会、修改账户设置，也不会保存凭据。
 
-普通用户可以从 GitHub Releases 下载最新的未签名版本：
+浏览器预览模式使用模拟数据。读取真实额度需要运行 Tauri 桌面应用，并且本机已经登录 Codex。
 
-- 最新发行版：https://github.com/Gavinnn102/quota-float/releases/latest
-- Windows：`quota-float-windows-unsigned.zip`
-- macOS Universal：`quota-float-macos-universal-unsigned.zip`
+## 开发环境
 
-下载后解压并运行应用。由于安装包尚未签名，Windows SmartScreen 或 macOS Gatekeeper 可能会显示安全提示。面向普通用户公开分发时，建议使用已签名的 Windows 版本和经过公证的 macOS 版本。
-
-### Windows 安装提示
-
-1. 下载并解压 `quota-float-windows-unsigned.zip`。
-2. 运行其中的 NSIS 安装程序或 MSI 安装包。
-3. 如果 SmartScreen 显示“未知发布者”，请确认文件来自本仓库的正式发行页后，再选择“更多信息”并继续运行。
-4. 在同一台电脑上登录 Codex Desktop，然后启动 Quota Float。
-
-### macOS 安装提示
-
-1. 下载并解压 `quota-float-macos-universal-unsigned.zip`。
-2. 打开 DMG，或直接运行其中的应用。
-3. 如果 Gatekeeper 阻止首次启动，可右键点击应用并选择“打开”，然后在系统提示中再次确认。
-4. 如仍被阻止，请前往“系统设置 → 隐私与安全性”允许该应用运行。
-
-## 问题反馈
-
-如需报告错误、兼容性问题或提出功能建议，请使用 GitHub Issues：
-
-https://github.com/Gavinnn102/quota-float/issues
-
-## 隐私边界
-
-Quota Float 采用本地优先设计，并严格限制自身权限范围：
-
-- 仅为查询 Codex 配额而读取本机 Codex Desktop 登录状态。
-- 仅将现有 Codex 访问令牌发送至 ChatGPT 配额接口。
-- 只在自身应用配置目录中保存小组件偏好设置。
-- 不保存 Codex 令牌、账户 ID、提示词、聊天记录、原始配额响应或本地认证路径。
-- 不包含遥测、分析、崩溃上报或第三方跟踪。
-- 不使用重置额度，也不修改账户设置。
-
-完整说明请参阅 [PRIVACY.md](PRIVACY.md) 和 [SECURITY.md](SECURITY.md)。
-
-## 准确性边界
-
-Codex 配额来自 Codex/ChatGPT 配额服务响应。如果响应格式发生变化，应用会显示不可用或数据过期状态，而不会编造配额数值。
-
-## 开发
-
-环境要求：
-
-- Node.js 20+
-- Rust stable
-- 当前平台所需的 Tauri 2 系统依赖
+先安装 Ubuntu 26.04 的系统依赖：
 
 ```bash
-npm install
-npm run dev
-npm run test
+sudo apt update
+sudo apt install \
+  libwebkit2gtk-4.1-dev \
+  build-essential \
+  curl \
+  wget \
+  file \
+  libxdo-dev \
+  libssl-dev \
+  libayatana-appindicator3-dev \
+  librsvg2-dev \
+  xwayland
+```
+
+再准备 Node.js 20+、Rust stable，并执行：
+
+```bash
+npm ci
+npm test
 npm run build
+cargo test --manifest-path src-tauri/Cargo.toml
 npm run tauri dev
 ```
 
 ## 构建
 
+生成 Ubuntu 安装包：
+
 ```bash
-npm run tauri build
+npm run tauri:ubuntu
 ```
 
-在 Windows 上，Tauri 可能会下载 WiX 来生成 MSI 安装包。如果 WiX 下载失败，发行版可执行文件可能仍会生成在：
+产物位置：
 
 ```text
-src-tauri/target/release/quota-float.exe
+src-tauri/target/release/bundle/deb/
 ```
+
+本仓库刻意只生成 `.deb`。当前 AppImage 打包方式可能与 Ubuntu 26.04 的 Wayland、Mesa、GLib 和 WebKitGTK 运行时产生冲突。
+
+## 隐私与准确性
+
+- 仅在应用配置目录保存悬浮组件偏好。
+- 不保存或记录 Token、账户 ID、提示词、聊天记录、原始接口响应和认证文件路径。
+- 额度服务并非公开稳定 API；登录态或响应格式改变时，组件会显示安全的不可用/过期状态，不会编造数值。
+
+完整说明见 [PRIVACY.md](PRIVACY.md) 与 [SECURITY.md](SECURITY.md)。
 
 ## 发布
 
-GitHub Actions 当前配置为：
+GitHub Actions 使用 `ubuntu-26.04` runner 验证和打包。推送 `v*` 标签后，会生成包含一个 `.deb` 与 `SHA256SUMS.txt` 的草稿 Release。
 
-- 推送或拉取请求触发 CI：运行前端测试、Rust 测试、Web 构建和 Tauri 构建。
-- 推送 `v*` 标签：生成并验证未签名的 Windows 和 macOS Universal 安装包、SHA-256 校验文件，以及供人工审核的 GitHub Release 草稿。
-
-向其他用户发布版本前，请先查看 [docs/GITHUB-RELEASE-CHECKLIST.md](docs/GITHUB-RELEASE-CHECKLIST.md)。
-
-不要将本地凭据、`.codex`、`.env*`、含个人信息的截图、`node_modules`、`dist`、`src-tauri/target` 或本地安装包提交到源代码仓库。
+发布前请阅读 [docs/RELEASE.md](docs/RELEASE.md)。
 
 ## 许可证
 

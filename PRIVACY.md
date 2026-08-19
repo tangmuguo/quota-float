@@ -16,6 +16,7 @@ Quota Float stores only widget preferences in its own application config directo
 - panel visibility
 - expanded or collapsed panel state
 - always-on-top state
+- user-positioned widget coordinates
 - pinned provider
 - auto-rotate interval
 - interface language

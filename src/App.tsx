@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { QuotaCard, QuotaOrb } from "./components/QuotaCard";
-import { fetchSnapshots, getPreferences, listenDesktopEvents, setWidgetExpanded, updatePreferences } from "./lib/bridge";
+import { fetchSnapshots, getPreferences, listenDesktopEvents, saveWidgetPosition, setWidgetExpanded, startWidgetDrag, updatePreferences } from "./lib/bridge";
 import { needsFastRefresh } from "./lib/format";
 import { copy, nextLanguage, normalizeLanguage } from "./lib/i18n";
 import { mergeSnapshots } from "./lib/snapshots";
 import type { ProviderSnapshot, WidgetPreferences } from "./types";
 
-const DEFAULT_PREFS: WidgetPreferences = { locked: false, panelVisible: true, expanded: true, alwaysOnTop: true, pinnedProvider: null, autoRotateSeconds: 12, language: "zh-CN" };
+const DEFAULT_PREFS: WidgetPreferences = { locked: false, panelVisible: true, expanded: true, alwaysOnTop: true, position: null, pinnedProvider: null, autoRotateSeconds: 12, language: "zh-CN" };
 
 type OperationErrorKey =
   | "settingsReadFailed"
@@ -152,6 +152,14 @@ export default function App() {
       });
   }, []);
 
+  const beginWidgetDrag = useCallback(() => {
+    void startWidgetDrag();
+  }, []);
+
+  const finishWidgetDrag = useCallback(() => {
+    void saveWidgetPosition();
+  }, []);
+
   if (!current) {
     return (
       <>
@@ -190,6 +198,8 @@ export default function App() {
           notice={operationErrorMessage}
           onToggleExpanded={() => changeExpanded(false)}
           resizeDisabled={resizing}
+          onStartDragging={beginWidgetDrag}
+          onFinishDragging={finishWidgetDrag}
         />
       </div>
       <div className="widget-view widget-view--compact">
@@ -201,6 +211,8 @@ export default function App() {
           resizeDisabled={resizing}
           notice={operationErrorMessage}
           compactActive={!preferences.expanded}
+          onStartDragging={beginWidgetDrag}
+          onFinishDragging={finishWidgetDrag}
         />
       </div>
     </>

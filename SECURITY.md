@@ -21,6 +21,6 @@ Please do not open public issues containing tokens, account IDs, raw backend res
 Before publishing a release, verify:
 
 - Source archives do not include local installers, build outputs, `.codex`, QA screenshots, or environment files.
-- Windows/macOS bundles are built by CI or a clean machine.
-- Unsigned builds are clearly labeled as unsigned.
-- Signed releases are produced only with maintainer-controlled certificates and secrets.
+- The Ubuntu 26.04 `.deb` is built by CI or a clean Ubuntu 26.04 machine.
+- The package dependency metadata includes only supported Ubuntu runtime libraries.
+- Release attachments include a SHA-256 checksum and are scanned for local paths and sensitive files.

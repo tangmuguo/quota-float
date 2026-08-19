@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   verify-version:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -34,19 +34,7 @@ jobs:
 
   build:
     needs: verify-version
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            artifact-name: quota-float-windows-unsigned
-            archive-name: quota-float-windows-unsigned.zip
-            build-command: npm run tauri -- build -- --locked
-          - os: macos-latest
-            artifact-name: quota-float-macos-universal-unsigned
-            archive-name: quota-float-macos-universal-unsigned.zip
-            build-command: npm run tauri -- build --target universal-apple-darwin -- --locked
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -54,9 +42,20 @@ jobs:
           node-version: 22
           cache: npm
       - uses: dtolnay/rust-toolchain@stable
-      - name: Install macOS universal targets
-        if: runner.os == 'macOS'
-        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - name: Install Ubuntu 26.04 Tauri dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            xwayland
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
@@ -65,133 +64,68 @@ jobs:
       - run: npm audit --audit-level=high
       - run: cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
       - run: cargo test --locked --manifest-path src-tauri/Cargo.toml
-      - name: Build bundle without local paths
-        shell: pwsh
-        run: |
-          $profilePath = [Environment]::GetFolderPath('UserProfile')
-          $workspacePath = (Get-Location).Path
-          $env:RUSTFLAGS = "--remap-path-prefix=$workspacePath=/src --remap-path-prefix=$profilePath=/build"
-          ${{ matrix.build-command }}
-      - name: Scan bundles for local build paths
-        shell: pwsh
-        run: |
-          $profilePath = [Environment]::GetFolderPath('UserProfile')
-          $workspacePath = (Get-Location).Path
-          $needles = @(
-            $profilePath,
-            $profilePath.Replace('\', '/'),
-            $workspacePath,
-            $workspacePath.Replace('\', '/')
-          ) | Select-Object -Unique
-          $files = if ($IsWindows) {
-            @(
-              Get-Item src-tauri/target/release/quota-float.exe
-              Get-ChildItem src-tauri/target/release/bundle -Recurse -File
-            )
-          } else {
-            Get-ChildItem src-tauri/target/universal-apple-darwin/release/bundle -Recurse -File
-          }
-          foreach ($file in $files) {
-            $bytes = [IO.File]::ReadAllBytes($file.FullName)
-            $utf8 = [Text.Encoding]::UTF8.GetString($bytes)
-            $utf16 = [Text.Encoding]::Unicode.GetString($bytes)
-            foreach ($needle in $needles) {
-              if ($utf8.Contains($needle) -or $utf16.Contains($needle)) {
-                throw "Release bundle contains a local build path"
-              }
-            }
-          }
-      - name: Stage and archive Windows installers
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Path release-stage | Out-Null
-          Copy-Item src-tauri/target/release/bundle/msi/*.msi release-stage/
-          Copy-Item src-tauri/target/release/bundle/nsis/*-setup.exe release-stage/
-          $msiCount = @(Get-ChildItem release-stage -Filter *.msi).Count
-          $exeCount = @(Get-ChildItem release-stage -Filter *-setup.exe).Count
-          if ($msiCount -ne 1 -or $exeCount -ne 1) { throw "Expected one MSI and one NSIS installer" }
-          Compress-Archive -Path release-stage/* -DestinationPath "${{ matrix.archive-name }}" -Force
-      - name: Stage and archive macOS bundles
-        if: runner.os == 'macOS'
+      - name: Build Ubuntu 26.04 Debian package
         shell: bash
         run: |
-          mkdir release-stage
-          cp -R src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app release-stage/
-          cp src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg release-stage/
-          test "$(find release-stage -maxdepth 1 -type d -name '*.app' | wc -l | tr -d ' ')" = "1"
-          test "$(find release-stage -maxdepth 1 -type f -name '*.dmg' | wc -l | tr -d ' ')" = "1"
-          ditto -c -k --sequesterRsrc --keepParent release-stage "${{ matrix.archive-name }}"
+          export RUSTFLAGS="--remap-path-prefix=$GITHUB_WORKSPACE=/src --remap-path-prefix=$HOME=/build"
+          npm run tauri -- build --bundles deb -- --locked
+          node scripts/normalize-ubuntu-deb.mjs
+      - name: Verify Debian package contents
+        shell: bash
+        run: |
+          shopt -s nullglob
+          packages=(src-tauri/target/release/bundle/deb/*.deb)
+          test "${#packages[@]}" -eq 1
+          package="${packages[0]}"
+          dpkg-deb --info "$package"
+          dpkg-deb --field "$package" Depends | grep -Fq 'libwebkit2gtk-4.1-0'
+          dpkg-deb --field "$package" Depends | grep -Fq 'libgtk-3-0t64'
+          dpkg-deb --field "$package" Depends | grep -Fq 'libayatana-appindicator3-1'
+          dpkg-deb --field "$package" Depends | grep -Fq 'xwayland'
+          for needle in "$GITHUB_WORKSPACE" "$HOME"; do
+            if strings -a "$package" | grep -Fq "$needle"; then
+              echo "Release package contains a local build path"
+              exit 1
+            fi
+          done
+          if dpkg-deb --contents "$package" | grep -E '(^|/)(\.env(?:\.[^/]*)?|auth\.json|credentials\.json|token\.json|target|screenshots?|.*\.log)(/|$)'; then
+            echo "Release package contains a forbidden path"
+            exit 1
+          fi
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact-name }}
-          path: ${{ matrix.archive-name }}
+          name: quota-float-ubuntu-26.04-deb
+          path: src-tauri/target/release/bundle/deb/*.deb
           if-no-files-found: error
           retention-days: 90
 
   draft-release:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          pattern: quota-float-*-unsigned
+          name: quota-float-ubuntu-26.04-deb
           path: release-assets
-          merge-multiple: true
-      - name: Verify archives and create checksums
-        shell: pwsh
+      - name: Verify package and create checksum
+        shell: bash
         run: |
-          Add-Type -AssemblyName System.IO.Compression.FileSystem
-          $expected = @(
-            "quota-float-windows-unsigned.zip",
-            "quota-float-macos-universal-unsigned.zip"
+          shopt -s nullglob
+          packages=(release-assets/*.deb)
+          test "${#packages[@]}" -eq 1
+          package="${packages[0]}"
+          dpkg-deb --field "$package" Depends | grep -Fq 'libgtk-3-0t64'
+          (
+            cd release-assets
+            sha256sum "$(basename "$package")" > SHA256SUMS.txt
           )
-          $actual = @(Get-ChildItem release-assets -Filter *.zip -File | Select-Object -ExpandProperty Name | Sort-Object)
-          if (Compare-Object ($expected | Sort-Object) $actual) { throw "Release archive set is incomplete or unexpected" }
-
-          $windowsZip = [IO.Compression.ZipFile]::OpenRead((Resolve-Path release-assets/quota-float-windows-unsigned.zip))
-          try {
-            $windowsEntries = @($windowsZip.Entries | Where-Object { $_.Name } | Select-Object -ExpandProperty FullName)
-          } finally {
-            $windowsZip.Dispose()
-          }
-          if (@($windowsEntries | Where-Object { $_ -match '\.msi$' }).Count -ne 1 -or
-              @($windowsEntries | Where-Object { $_ -match '-setup\.exe$' }).Count -ne 1) {
-            throw "Windows archive must contain exactly one MSI and one NSIS installer"
-          }
-
-          $macZip = [IO.Compression.ZipFile]::OpenRead((Resolve-Path release-assets/quota-float-macos-universal-unsigned.zip))
-          try {
-            $macEntries = @(
-              $macZip.Entries |
-                Where-Object { $_.Name -and $_.FullName -notmatch '(^|/)__MACOSX/|(^|/)\._' } |
-                Select-Object -ExpandProperty FullName
-            )
-          } finally {
-            $macZip.Dispose()
-          }
-          if (@($macEntries | Where-Object { $_ -match '\.dmg$' }).Count -ne 1 -or
-              @($macEntries | Where-Object { $_ -match '\.app/Contents/MacOS/' }).Count -lt 1) {
-            throw "macOS archive must contain one DMG and one complete app bundle"
-          }
-
-          $allEntries = @($windowsEntries + $macEntries)
-          $forbidden = @($allEntries | Where-Object { $_ -match '(^|/)(\.env(?:\.[^/]*)?|auth\.json|credentials\.json|token\.json|\.playwright-cli|target|screenshots?|.*\.log)(/|$)' })
-          if ($forbidden.Count -ne 0) { throw "Release archive contains a forbidden path" }
-
-          $checksumLines = foreach ($name in $expected) {
-            $hash = (Get-FileHash "release-assets/$name" -Algorithm SHA256).Hash.ToLowerInvariant()
-            "$hash  $name"
-          }
-          [IO.File]::WriteAllLines((Join-Path (Resolve-Path release-assets) 'SHA256SUMS.txt'), $checksumLines)
       - uses: softprops/action-gh-release@v3
         with:
           files: |
-            release-assets/quota-float-windows-unsigned.zip
-            release-assets/quota-float-macos-universal-unsigned.zip
+            release-assets/*.deb
             release-assets/SHA256SUMS.txt
           body_path: docs/RELEASE_TEMPLATE.md
           draft: true

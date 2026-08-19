@@ -9,13 +9,13 @@ Do not paste tokens, account IDs, raw backend responses, local auth paths, or sc
 ## Development
 
 ```bash
-npm install
+npm ci
 npm run test
 cargo test --manifest-path src-tauri/Cargo.toml
 npm run build
 ```
 
-Use `npm run tauri dev` for desktop testing. Browser preview uses mock data and cannot verify real quota reads.
+Use `npm run tauri dev` for Ubuntu 26.04 desktop testing. Browser preview uses mock data and cannot verify real quota reads.
 
 ## Pull Requests
 

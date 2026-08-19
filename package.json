@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "test": "vitest run",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "tauri:ubuntu": "tauri build --bundles deb && node scripts/normalize-ubuntu-deb.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",

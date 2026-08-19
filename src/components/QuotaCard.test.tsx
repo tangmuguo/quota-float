@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ProviderSnapshot } from "../types";
 import { QuotaOrb } from "./QuotaCard";
@@ -81,5 +81,28 @@ describe("compact quota view", () => {
     rerender(<QuotaOrb {...props} compactActive />);
     act(() => vi.advanceTimersByTime(2000));
     expect(container.querySelector(".quota-orb")?.classList.contains("quota-orb--idle")).toBe(true);
+  });
+
+  it("starts native dragging and persists the new placement when released", () => {
+    const onStartDragging = vi.fn();
+    const onFinishDragging = vi.fn();
+    const { container } = render(
+      <QuotaOrb
+        snapshot={baseSnapshot}
+        language="zh-CN"
+        onHover={() => undefined}
+        onToggleExpanded={() => undefined}
+        onStartDragging={onStartDragging}
+        onFinishDragging={onFinishDragging}
+      />,
+    );
+
+    const orb = container.querySelector(".quota-orb");
+    expect(orb).toBeTruthy();
+    fireEvent.mouseDown(orb!, { button: 0 });
+    fireEvent.mouseUp(orb!, { button: 0 });
+
+    expect(onStartDragging).toHaveBeenCalledTimes(1);
+    expect(onFinishDragging).toHaveBeenCalledTimes(1);
   });
 });

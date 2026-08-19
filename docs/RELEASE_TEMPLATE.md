@@ -1,54 +1,45 @@
 # Quota Float 0.1.9
 
-Quota Float is a lightweight floating desktop widget for checking Codex quota from the local Codex Desktop login state.
+Quota Float is a lightweight Ubuntu 26.04 desktop widget for checking Codex quota from an existing local Codex login.
 
 ## Downloads
 
-- Windows unsigned: `quota-float-windows-unsigned.zip`
-- macOS Universal unsigned: `quota-float-macos-universal-unsigned.zip`
+- Ubuntu 26.04 x86_64 Debian package: `quota-float_<version>_amd64.deb`
 - SHA-256 checksums: `SHA256SUMS.txt`
 
 ## What's new
 
-- Localizes runtime error notices in Chinese and English, including live language changes while an error is visible.
-- Updates every tray menu label immediately when the language changes without resetting checked states.
-- Adds a top-left compact button that switches directly between the 320x320 expanded panel and the 100x100 compact panel.
-- Keeps both visual states ready so the native window and interface change together without a visible resize-then-move sequence.
-- Persists the selected panel mode and keeps rapid toggles serialized.
-- Improves host-following window placement and compact-state error feedback.
-- Removes the misleading draggable cursor and manual drag capability so the panel stays fixed.
+- Converts the desktop shell to an Ubuntu 26.04-first release.
+- Builds one native `.deb` with WebKitGTK 4.1, GTK 3 t64, Ayatana AppIndicator, and XWayland runtime dependencies.
+- Adds bottom-right work-area placement, multi-monitor/scale clamping, and a tray action to reset placement.
+- Uses GNOME Wayland natively; draggable panel/orb placement is available when the compositor controls initial window coordinates.
+- Keeps a taskbar recovery path when the GNOME session does not expose an AppIndicator.
+- Persists a user-positioned widget location when the session reports it.
 
 ## Install
 
-1. Sign in to Codex Desktop on the same machine.
-2. Download the package for your platform.
-3. Unzip the package and run the app.
+1. Sign in to Codex on the same Ubuntu 26.04 machine.
+2. Download the `.deb` and optionally verify its checksum.
+3. Install it with:
 
-### macOS unsigned app note
+   ```bash
+   sudo apt install ./quota-float_<version>_amd64.deb
+   ```
 
-This macOS build is unsigned and not notarized. If macOS blocks the first launch:
-
-1. Right-click the app and choose Open.
-2. Choose Open again in the system prompt.
-3. If needed, allow the app in System Settings -> Privacy & Security.
-
-## Privacy
-
-Quota Float does not store Codex tokens, account IDs, prompts, chats, raw quota responses, or local auth paths. It stores only widget preferences. See `PRIVACY.md`.
+4. Launch **Quota Float Ubuntu** from Activities or the dock.
 
 ## Notes
 
-- This release is unsigned. Windows may show an unknown publisher warning; macOS may show a Gatekeeper warning.
-- Codex quota is read from non-public quota service responses and may stop working if the response shape changes.
-- The app shows stale/unavailable states instead of estimating quota.
-- Windows and macOS builds share the same React/CSS UI and behavior layer.
+- This release supports Ubuntu 26.04 x86_64 only.
+- GNOME Wayland determines initial regular-window placement. The widget requests the lower-right corner and can be dragged if GNOME selects a different location.
+- Codex quota is read from non-public quota-service responses; the app shows stale/unavailable states instead of estimating quota.
+- Quota Float stores only widget preferences. It does not persist Codex credentials, account IDs, prompts, chats, raw quota responses, or local auth paths.
 
 ## Release checks
 
-- [ ] Frontend tests passed.
-- [ ] Rust tests passed.
-- [ ] Web build passed.
-- [ ] Windows MSI and NSIS bundles generated and installation-checked.
-- [ ] macOS Universal app and DMG generated and installation-checked.
-- [ ] Version consistency, archive contents, SHA-256 hashes, and privacy scan passed.
+- [ ] Frontend tests and web build passed.
+- [ ] Rust tests and Clippy passed.
+- [ ] Ubuntu 26.04 `.deb` generated and installation-checked.
+- [ ] GNOME Wayland and Xorg/XWayland window behavior checked.
+- [ ] Version consistency, package contents, SHA-256 hashes, and privacy scan passed.
 - [ ] Draft attachments reviewed before publishing.

@@ -13,14 +13,14 @@ An Ubuntu 26.04 widget that reads the existing local Codex login state and shows
 - Uses a packaged GNOME Shell extension to anchor the widget 24 px from the active ChatGPT window's lower-right corner. This works in the native GNOME Wayland session instead of relying on a client-side position request that Mutter can reject.
 - Follows the ChatGPT window as it moves, resizes, changes workspace, minimizes, and restores. The widget is not a free-floating all-workspaces desktop overlay.
 - Changes panel size in a size-only native transaction. The Shell extension moves the already-resized frame on its next compositor tick, avoiding the resize-and-reposition hang seen on Wayland.
-- Includes tray controls for show/hide, refresh, unlock click-through, switch language, configure login autostart, and quit.
+- Includes tray controls for show/hide, switch language, configure login autostart, and quit.
 
 ## What it shows
 
 - Codex plan, weekly remaining quota, next reset time, and reset-credit information when the service provides it.
 - Healthy, caution, critical, stale, signed-out, and unavailable states.
 - A 320 × 320 full panel and a 100 × 100 compact quota orb.
-- Persistent preferences for panel size, visibility, click-through behavior, language, and provider rotation.
+- Persistent preferences for panel size, visibility, language, and provider rotation.
 
 ## Install
 

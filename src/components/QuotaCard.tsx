@@ -98,14 +98,12 @@ export const QuotaCard = memo(function QuotaCard({
           <p className="eyebrow">{snapshot.displayName} · {snapshot.plan ?? t.accountFallback}</p>
           {snapshot.status !== "stale" ? <p className="updated">{t.shortRemaining}</p> : null}
         </div>
-        {!preferences.locked ? (
-          <nav className="card-actions" aria-label={t.controls} onMouseDown={(event) => event.stopPropagation()} onMouseUp={(event) => event.stopPropagation()}>
-            {providerCount > 1 ? <button onClick={onPrevious} aria-label={t.servicePrevious}><ArrowUp /></button> : null}
-            {providerCount > 1 ? <button onClick={onNext} aria-label={t.serviceNext}><ArrowDown /></button> : null}
-            <span className={`usage-indicator usage-indicator--${indicatorState}`} role="status" aria-label={indicatorLabel} title={indicatorLabel}><i /></span>
-            <button className="language-button" onClick={onLanguage} aria-label={t.switchLanguage} title={t.switchLanguage}>{language === "en" ? "中" : "EN"}</button>
-          </nav>
-        ) : null}
+        <nav className="card-actions" aria-label={t.controls} onMouseDown={(event) => event.stopPropagation()} onMouseUp={(event) => event.stopPropagation()}>
+          {providerCount > 1 ? <button onClick={onPrevious} aria-label={t.servicePrevious}><ArrowUp /></button> : null}
+          {providerCount > 1 ? <button onClick={onNext} aria-label={t.serviceNext}><ArrowDown /></button> : null}
+          <span className={`usage-indicator usage-indicator--${indicatorState}`} role="status" aria-label={indicatorLabel} title={indicatorLabel}><i /></span>
+          <button className="language-button" onClick={onLanguage} aria-label={t.switchLanguage} title={t.switchLanguage}>{language === "en" ? "中" : "EN"}</button>
+        </nav>
       </header>
 
       {available && primary !== null ? (

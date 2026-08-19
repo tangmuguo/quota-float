@@ -32,8 +32,6 @@ const TRAY_LANGUAGE_CHANGED_EVENT: &str = "tray-language-changed";
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct TrayLabels {
     show_panel: &'static str,
-    refresh: &'static str,
-    unlock: &'static str,
     language: &'static str,
     autostart: &'static str,
     quit: &'static str,
@@ -41,8 +39,6 @@ struct TrayLabels {
 
 struct TrayMenuItems<R: Runtime> {
     show_panel: CheckMenuItem<R>,
-    refresh: MenuItem<R>,
-    unlock: MenuItem<R>,
     language: MenuItem<R>,
     autostart: CheckMenuItem<R>,
     quit: MenuItem<R>,
@@ -52,8 +48,6 @@ fn tray_labels(language: &str) -> TrayLabels {
     if language == "en" {
         TrayLabels {
             show_panel: "Show quota panel",
-            refresh: "Refresh now",
-            unlock: "Unlock widget",
             language: "Switch to Chinese",
             autostart: "Start at login",
             quit: "Quit",
@@ -61,8 +55,6 @@ fn tray_labels(language: &str) -> TrayLabels {
     } else {
         TrayLabels {
             show_panel: "显示额度面板",
-            refresh: "立即刷新",
-            unlock: "解锁悬浮窗",
             language: "切换到英文",
             autostart: "开机启动",
             quit: "退出",
@@ -75,8 +67,6 @@ fn apply_tray_labels<R: Runtime>(
     items: &TrayMenuItems<R>,
 ) -> tauri::Result<()> {
     items.show_panel.set_text(labels.show_panel)?;
-    items.refresh.set_text(labels.refresh)?;
-    items.unlock.set_text(labels.unlock)?;
     items.language.set_text(labels.language)?;
     items.autostart.set_text(labels.autostart)?;
     items.quit.set_text(labels.quit)?;
@@ -291,40 +281,6 @@ fn set_panel_visible(visible: bool, app: AppHandle) -> Result<WidgetPreferences,
     update_panel_visibility(&app, visible)
 }
 
-fn apply_lock(app: &AppHandle, locked: bool) -> Result<(), String> {
-    let window = app
-        .get_webview_window("widget")
-        .ok_or_else(|| "widget window missing".to_string())?;
-    window
-        .set_ignore_cursor_events(locked)
-        .map_err(|_| "failed to toggle click-through".to_string())
-}
-
-#[tauri::command]
-fn set_widget_locked(
-    locked: bool,
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> Result<WidgetPreferences, String> {
-    let previous = state
-        .preferences
-        .lock()
-        .map_err(|_| "settings unavailable".to_string())?
-        .clone();
-    let mut next = previous.clone();
-    next.locked = locked;
-    persist_preferences(&state.preferences_path, &next)?;
-    if let Err(error) = apply_lock(&app, locked) {
-        let _ = persist_preferences(&state.preferences_path, &previous);
-        return Err(error);
-    }
-    *state
-        .preferences
-        .lock()
-        .map_err(|_| "settings unavailable".to_string())? = next.clone();
-    Ok(next)
-}
-
 fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
     let (panel_visible, initial_language) = app
         .state::<AppState>()
@@ -341,8 +297,6 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
         panel_visible,
         None::<&str>,
     )?;
-    let refresh = MenuItem::with_id(app, "refresh", labels.refresh, true, None::<&str>)?;
-    let unlock = MenuItem::with_id(app, "unlock", labels.unlock, true, None::<&str>)?;
     let language = MenuItem::with_id(app, "language", labels.language, true, None::<&str>)?;
     let autostart_enabled = app.autolaunch().is_enabled().unwrap_or(false);
     let autostart = CheckMenuItem::with_id(
@@ -354,10 +308,7 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
         None::<&str>,
     )?;
     let quit = MenuItem::with_id(app, "quit", labels.quit, true, None::<&str>)?;
-    let menu = Menu::with_items(
-        app,
-        &[&show_panel, &refresh, &unlock, &language, &autostart, &quit],
-    )?;
+    let menu = Menu::with_items(app, &[&show_panel, &language, &autostart, &quit])?;
     let mut builder = TrayIconBuilder::with_id("main")
         .menu(&menu)
         .tooltip("Quota Float · Ubuntu 26.04");
@@ -369,8 +320,6 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
     let show_panel_click_menu = show_panel.clone();
     let label_items = TrayMenuItems {
         show_panel: show_panel.clone(),
-        refresh: refresh.clone(),
-        unlock: unlock.clone(),
         language: language.clone(),
         autostart: autostart.clone(),
         quit: quit.clone(),
@@ -401,19 +350,6 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
                         let _ = show_panel_menu.set_checked(visible);
                     }
                     Err(_) => eprintln!("panel visibility update failed"),
-                }
-            }
-            "refresh" => {
-                let _ = app.emit_to("widget", "refresh-requested", ());
-            }
-            "unlock" => {
-                let _ = apply_lock(app, false);
-                if let Some(state) = app.try_state::<AppState>() {
-                    if let Ok(mut prefs) = state.preferences.lock() {
-                        prefs.locked = false;
-                        let _ = persist_preferences(&state.preferences_path, &prefs);
-                        let _ = app.emit_to("widget", "preferences-changed", prefs.clone());
-                    }
                 }
             }
             "language" => {
@@ -502,9 +438,6 @@ pub fn run() {
             if setup_tray(app).is_err() {
                 eprintln!("tray setup failed");
             }
-            if preferences.locked {
-                let _ = apply_lock(app.handle(), true);
-            }
             if let Some(window) = app.get_webview_window("widget") {
                 // The Shell extension owns stacking and workspace affinity so
                 // the widget stays with ChatGPT instead of becoming a desktop
@@ -526,8 +459,7 @@ pub fn run() {
             get_preferences,
             set_preferences,
             set_widget_expanded,
-            set_panel_visible,
-            set_widget_locked
+            set_panel_visible
         ])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
@@ -554,8 +486,6 @@ mod tray_label_tests {
             tray_labels("en"),
             TrayLabels {
                 show_panel: "Show quota panel",
-                refresh: "Refresh now",
-                unlock: "Unlock widget",
                 language: "Switch to Chinese",
                 autostart: "Start at login",
                 quit: "Quit",
@@ -567,8 +497,6 @@ mod tray_label_tests {
     fn returns_chinese_tray_labels_and_uses_them_as_the_fallback() {
         let expected = TrayLabels {
             show_panel: "显示额度面板",
-            refresh: "立即刷新",
-            unlock: "解锁悬浮窗",
             language: "切换到英文",
             autostart: "开机启动",
             quit: "退出",

@@ -21,7 +21,6 @@ export interface ProviderSnapshot {
 }
 
 export interface WidgetPreferences {
-  locked: boolean;
   panelVisible: boolean;
   expanded: boolean;
   pinnedProvider: ProviderId | null;

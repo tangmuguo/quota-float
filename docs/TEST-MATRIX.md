@@ -9,7 +9,7 @@
 | GNOME Wayland | 原生 Wayland 会话 | Shell 扩展启用后，组件贴靠活动 ChatGPT 窗口右下角；WebView 可点击、透明窗口可用 | 待实机验证 |
 | GNOME Shell | ChatGPT 移动、缩放、最小化、恢复和工作区切换 | 组件跟随窗口；ChatGPT 不在前台时不残留为桌面中间的独立悬浮窗 | 待实机验证 |
 | 面板 | 320 × 320 / 100 × 100 切换 | 原生尺寸先更新，扩展再按已更新的 frame 重新锚定；快速点击被串行化且不会卡死 | 前端/Rust 单元测试覆盖；待实机验证 |
-| AppIndicator | Ubuntu Desktop 带指示器扩展 | 显示/隐藏、刷新、解锁、语言、自启动和退出可用 | 待实机验证 |
+| AppIndicator | Ubuntu Desktop 带指示器扩展 | 显示/隐藏、语言、自启动和退出可用 | 待实机验证 |
 | 自启动 | XDG autostart | 登录后启动，扩展会在 ChatGPT 前台时重新锚定组件 | 待实机验证 |
 | 构建 | Ubuntu 26.04 `.deb` | 只生成一个 `.deb`，声明 WebKitGTK、GTK t64、Ayatana、GNOME Shell 依赖，并包含扩展文件 | CI/release 配置已覆盖 |
 | 安装 | `sudo apt install ./package.deb` | 依赖可解析、桌面启动器可用、升级不丢失用户配置 | 待实机验证 |

@@ -12,7 +12,6 @@ Quota Float is designed to be local-first and minimal.
 
 Quota Float stores only widget preferences in its own application config directory:
 
-- locked state
 - panel visibility
 - expanded or collapsed panel state
 - pinned provider

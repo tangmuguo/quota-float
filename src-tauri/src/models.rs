@@ -41,7 +41,6 @@ impl ProviderSnapshot {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WidgetPreferences {
-    pub locked: bool,
     #[serde(default = "default_panel_visible")]
     pub panel_visible: bool,
     #[serde(default = "default_expanded")]
@@ -65,7 +64,6 @@ fn default_language() -> String {
 impl Default for WidgetPreferences {
     fn default() -> Self {
         Self {
-            locked: false,
             panel_visible: true,
             expanded: true,
             pinned_provider: None,
@@ -95,7 +93,7 @@ mod tests {
     #[test]
     fn older_preferences_keep_the_panel_visible() {
         let preferences: WidgetPreferences = serde_json::from_str(
-            r#"{"locked":false,"alwaysOnTop":true,"pinnedProvider":null,"autoRotateSeconds":12,"language":"zh-CN"}"#,
+            r#"{"alwaysOnTop":true,"pinnedProvider":null,"autoRotateSeconds":12,"language":"zh-CN"}"#,
         )
         .expect("older settings should remain readable");
 

@@ -17,7 +17,6 @@ vi.mock("./lib/bridge", () => bridge);
 import App from "./App";
 
 const preferences: WidgetPreferences = {
-  locked: false,
   panelVisible: true,
   expanded: true,
   pinnedProvider: null,

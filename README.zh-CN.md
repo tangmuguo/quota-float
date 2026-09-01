@@ -10,7 +10,7 @@
 
 - **Windows：**保留原有 ChatGPT/Codex 宿主窗口跟随实现，并生成 MSI 与 NSIS 安装包。
 - **macOS：**生成同时支持 Apple Silicon 与 Intel 的通用 App 和 DMG。
-- **Ubuntu 26.04 x86_64：**生成原生 `.deb`，并通过随包 GNOME Shell 扩展在 Wayland 下锚定到活动 ChatGPT 窗口。
+- **Ubuntu 26.04 x86_64：**生成原生 `.deb`，并通过随包 GNOME Shell 48–50 扩展在 Wayland 下锚定到活动 ChatGPT 窗口。
 
 Ubuntu 是新增的平台路径；共享的 React 界面、额度读取、偏好、托盘和发布逻辑仍支持 Windows 与 macOS。
 
@@ -19,7 +19,8 @@ Ubuntu 是新增的平台路径；共享的 React 界面、额度读取、偏好
 - Codex 套餐、本周剩余额度、下次重置时间，以及接口提供时的重置机会信息。
 - 正常、提醒、紧急、过期、未登录和暂不可用等状态。
 - 320 × 320 完整面板和 100 × 100 紧凑额度圆球。
-- 持久保存显示/尺寸、置顶、语言和服务轮换等偏好。
+- 持久保存面板显示状态、完整/紧凑模式和界面语言。
+- 托盘提供显示/隐藏、刷新、语言、开机启动和退出控制。
 - 错误页与托盘均提供手动刷新，自动退避不会阻断恢复入口。
 
 ## Ubuntu 安装
@@ -27,10 +28,10 @@ Ubuntu 是新增的平台路径；共享的 React 界面、额度读取、偏好
 下载 Ubuntu 26.04 的 `.deb`，使用 `apt` 安装以自动解析运行时依赖：
 
 ```bash
-sudo apt install ./quota-float_*_amd64.deb
+sudo apt install "./Quota Float Ubuntu_0.1.10_amd64.deb"
 ```
 
-请先在同一台电脑登录 Codex。首次安装或更新扩展后，请注销并重新登录一次，让 GNOME Shell 扫描扩展。Quota Float 启动时会启用扩展，应用退出时会禁用；也可手动控制：
+正式支持的 Linux 桌面会话是 Ubuntu 26.04、GNOME Shell 48–50 与 Wayland。请先在同一台电脑登录 Codex。首次安装或更新扩展后，请注销并重新登录一次，让 GNOME Shell 扫描扩展。在受支持的 GNOME 会话中，Quota Float 会在启动时尽力启用扩展，并在正常退出时尝试禁用；若系统策略、崩溃或强制结束导致清理未执行，可手动控制：
 
 ```bash
 gnome-extensions disable quota-float-anchor@quotafloat.app
@@ -43,7 +44,7 @@ gnome-extensions enable quota-float-anchor@quotafloat.app
 sudo apt remove quota-float-ubuntu
 ```
 
-安装包声明 Ubuntu 26.04 所需的 `libwebkit2gtk-4.1-0`、`libgtk-3-0t64`、`libayatana-appindicator3-1` 和 GNOME Shell 48 以上版本等依赖。
+Debian 包依赖 `libwebkit2gtk-4.1-0`、`libgtk-3-0t64`、`libayatana-appindicator3-1` 和 `gnome-shell (>= 48)`；随包扩展的元数据当前支持 GNOME Shell 48–50。
 
 ## GNOME Wayland 窗口锚定
 
@@ -64,14 +65,16 @@ Quota Float 只读取已有的本机登录文件：
 
 ## 开发
 
-准备 Node.js 20+、Rust stable 和项目依赖后执行：
+准备 Node.js 20.19+ 或 22.12+、Rust stable 和项目依赖后执行：
 
 ```bash
 npm ci
 npm test
 npm run build
+cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 cargo test --locked --manifest-path src-tauri/Cargo.toml
-npm run tauri dev
+npm run tauri -- dev
 ```
 
 Ubuntu 26.04 还需要 [发布说明](docs/RELEASE.md) 中列出的 Tauri GTK/WebKit 开发依赖。
@@ -87,10 +90,11 @@ npm run tauri -- build
 构建 Ubuntu Debian 包：
 
 ```bash
+export RUSTFLAGS="--remap-path-prefix=$PWD=/src --remap-path-prefix=$HOME=/build"
 npm run tauri:ubuntu
 ```
 
-Ubuntu 产物位于 `src-tauri/target/release/bundle/deb/`。Linux 刻意选择 `.deb` 而非 AppImage；这项 Linux 专用选择不会取消 Windows 或 macOS 产物。
+该命令会使用已提交的 Cargo 锁文件构建、规范化运行时依赖字段，并解包校验安装内容。产物 `Quota Float Ubuntu_<版本>_amd64.deb` 位于 `src-tauri/target/release/bundle/deb/`；路径重映射用于确认安装包没有嵌入本机构建路径。Linux 刻意选择 `.deb` 而非 AppImage；这项 Linux 专用选择不会取消 Windows 或 macOS 产物。
 
 ## 发布
 
@@ -98,7 +102,7 @@ CI 覆盖共享前端以及 Windows、macOS、Ubuntu 桌面构建。推送匹配
 
 - 含一个 MSI 和一个 NSIS 的 Windows 压缩包；
 - 含一个通用 App 和一个 DMG 的 macOS 压缩包；
-- 一个 Ubuntu 26.04 `.deb`；
+- 一个 `Quota Float Ubuntu_<版本>_amd64.deb`；
 - `SHA256SUMS.txt`。
 
 Ubuntu 发布门禁会先解包 `.deb`，再扫描实际安装树中的禁用文件、高置信度密钥和本机构建路径。发布前请阅读 [docs/RELEASE.md](docs/RELEASE.md)。

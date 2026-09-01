@@ -55,6 +55,19 @@ if (!releaseTemplate.startsWith(`# Quota Float ${expectedVersion}\n`)) {
   throw new Error("Release template title does not match the application version");
 }
 
+const expectedDebFilename = `Quota Float Ubuntu_${expectedVersion}_amd64.deb`;
+for (const documentationPath of [
+  "README.md",
+  "README.zh-CN.md",
+  "docs/RELEASE.md",
+  "docs/RELEASE_TEMPLATE.md",
+]) {
+  const documentation = readFileSync(documentationPath, "utf8");
+  if (!documentation.includes(expectedDebFilename)) {
+    throw new Error(`${documentationPath} does not reference the current Debian package filename`);
+  }
+}
+
 const rustSource = readFileSync("src-tauri/src/lib.rs", "utf8");
 if (!rustSource.includes('concat!("QuotaFloat/", env!("CARGO_PKG_VERSION"))')) {
   throw new Error("Quota request user agent is not derived from the Cargo package version");

@@ -10,7 +10,7 @@ A small cross-platform desktop widget that reads the existing local Codex login 
 
 - **Windows:** preserves the native ChatGPT/Codex host-following implementation and produces MSI and NSIS installers.
 - **macOS:** produces universal Apple Silicon/Intel app and DMG bundles.
-- **Ubuntu 26.04 x86_64:** produces a native `.deb` and uses a bundled GNOME Shell extension to anchor the widget to the active ChatGPT window under Wayland.
+- **Ubuntu 26.04 x86_64:** produces a native `.deb` and uses a bundled GNOME Shell 48–50 extension to anchor the widget to the active ChatGPT window under Wayland.
 
 Ubuntu support is an additional platform path. Shared React, quota, preference, tray, and release logic remains available to Windows and macOS.
 
@@ -19,7 +19,8 @@ Ubuntu support is an additional platform path. Shared React, quota, preference, 
 - Codex plan, weekly remaining quota, next reset time, and reset-credit information when the service provides it.
 - Healthy, caution, critical, stale, signed-out, and unavailable states.
 - A 320 × 320 full panel and a 100 × 100 compact quota orb.
-- Persistent preferences for panel visibility/size, always-on-top, language, and provider rotation.
+- Persistent preferences for panel visibility, expanded/compact mode, and interface language.
+- Tray controls for show/hide, refresh, language, start at login, and quit.
 - Manual refresh from error states and the tray, so recovery is not blocked by automatic retry backoff.
 
 ## Ubuntu installation
@@ -27,10 +28,10 @@ Ubuntu support is an additional platform path. Shared React, quota, preference, 
 Download the Ubuntu 26.04 `.deb`, then install it with `apt` so runtime dependencies are resolved:
 
 ```bash
-sudo apt install ./quota-float_*_amd64.deb
+sudo apt install "./Quota Float Ubuntu_0.1.10_amd64.deb"
 ```
 
-Sign in to Codex on the same machine first. After the initial extension install or update, log out and back in once so GNOME Shell can scan it. Quota Float enables the extension when the app starts and disables it when the app exits. It can also be controlled manually:
+The supported Linux desktop session is Ubuntu 26.04 with GNOME Shell 48–50 on Wayland. Sign in to Codex on the same machine first. After the initial extension install or update, log out and back in once so GNOME Shell can scan it. In a supported GNOME session, Quota Float makes a best-effort attempt to enable the extension at startup and disable it on a normal exit. If system policy, a crash, or forced termination prevents cleanup, control it manually:
 
 ```bash
 gnome-extensions disable quota-float-anchor@quotafloat.app
@@ -43,7 +44,7 @@ Uninstalling the package removes the app and extension files:
 sudo apt remove quota-float-ubuntu
 ```
 
-The package declares Ubuntu 26.04 runtime dependencies including `libwebkit2gtk-4.1-0`, `libgtk-3-0t64`, `libayatana-appindicator3-1`, and GNOME Shell 48 or newer.
+The Debian package depends on `libwebkit2gtk-4.1-0`, `libgtk-3-0t64`, `libayatana-appindicator3-1`, and `gnome-shell (>= 48)`; the bundled extension metadata currently supports GNOME Shell 48–50.
 
 ## GNOME Wayland placement
 
@@ -64,14 +65,16 @@ It uses that existing session only to call the Codex/ChatGPT quota endpoints. It
 
 ## Development
 
-Install Node.js 20+, Rust stable, and project dependencies, then run:
+Install Node.js 20.19+ or 22.12+, Rust stable, and project dependencies, then run:
 
 ```bash
 npm ci
 npm test
 npm run build
+cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 cargo test --locked --manifest-path src-tauri/Cargo.toml
-npm run tauri dev
+npm run tauri -- dev
 ```
 
 Ubuntu 26.04 additionally needs the Tauri GTK/WebKit development packages listed in [the release guide](docs/RELEASE.md).
@@ -87,10 +90,11 @@ npm run tauri -- build
 Build the Ubuntu Debian package with:
 
 ```bash
+export RUSTFLAGS="--remap-path-prefix=$PWD=/src --remap-path-prefix=$HOME=/build"
 npm run tauri:ubuntu
 ```
 
-The Ubuntu package is written under `src-tauri/target/release/bundle/deb/`. Linux intentionally targets `.deb` instead of AppImage; that Linux-specific choice does not remove Windows or macOS bundles.
+The command builds with the committed Cargo lockfile, normalizes the runtime dependency field, then extracts and verifies the package contents. The resulting `Quota Float Ubuntu_<version>_amd64.deb` is written under `src-tauri/target/release/bundle/deb/`. The path remapping allows the package verifier to confirm that local build paths were not embedded. Linux intentionally targets `.deb` instead of AppImage; that Linux-specific choice does not remove Windows or macOS bundles.
 
 ## Release
 
@@ -98,7 +102,7 @@ CI covers the shared frontend plus Windows, macOS, and Ubuntu desktop builds. A 
 
 - a Windows archive with one MSI and one NSIS installer;
 - a macOS archive with one universal app and one DMG;
-- one Ubuntu 26.04 `.deb`;
+- one `Quota Float Ubuntu_<version>_amd64.deb`;
 - `SHA256SUMS.txt`.
 
 The Ubuntu gate extracts the `.deb` and scans the installed file tree for forbidden files, high-confidence secrets, and local build paths before upload. See [docs/RELEASE.md](docs/RELEASE.md) before publishing.

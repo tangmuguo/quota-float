@@ -1,6 +1,9 @@
 /node_modules
 /dist
 /release
+/release-assets
+/release-stage
+/AGENTS.md
 /src-tauri/target
 /src-tauri/gen/schemas/linux-schema.json
 /.agents
@@ -15,6 +18,7 @@
 *.msi
 *.dmg
 *.app
+*.deb
 !/src-tauri/gnome-extension/quota-float-anchor@quotafloat.app/
 !/src-tauri/gnome-extension/quota-float-anchor@quotafloat.app/**
 *.zip
@@ -24,6 +28,8 @@
 *.bak
 .env
 .env.*
+!.env.example
+!.env.template
 auth.json
 credentials.json
 token.json

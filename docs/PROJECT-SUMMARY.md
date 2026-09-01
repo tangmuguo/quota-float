@@ -19,7 +19,8 @@ Quota Float 是一个跨平台 Tauri 2 Codex 额度组件。它通过本机已�
 - 身份字段逐项识别，可处理多个字段同时包含 `codex` 的窗口。
 - 组件只允许 320 × 320 和 100 × 100 两种原生尺寸。
 - 关闭窗口会持久化隐藏状态并同步托盘勾选；首次点击“显示面板”即可恢复。
-- 应用启动时启用扩展，退出时禁用；扩展仅操作 Quota Float 窗口。
+- 应用在 GNOME 会话启动时尽力启用扩展，并在正常退出时尝试禁用；扩展仅操作 Quota Float 窗口。
+- 托盘保留显示/隐藏、刷新、语言、开机启动和退出；已移除鼠标穿透/锁定功能与“解锁悬浮窗”，旧配置中的 `locked` 字段会被忽略并在后续保存时移除。
 
 ## 恢复与发布门禁
 
@@ -38,11 +39,12 @@ Quota Float 是一个跨平台 Tauri 2 Codex 额度组件。它通过本机已�
 ## 验证命令
 
 ```bash
+node scripts/verify-release-version.mjs
 npm test
 npm run build
 cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 cargo test --locked --manifest-path src-tauri/Cargo.toml
+export RUSTFLAGS="--remap-path-prefix=$PWD=/src --remap-path-prefix=$HOME=/build"
 npm run tauri:ubuntu
-node scripts/verify-ubuntu-deb.mjs
 ```

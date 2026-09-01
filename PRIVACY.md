@@ -16,7 +16,7 @@ While Quota Float is running, the extension checks GNOME's normal top-level wind
 
 The extension moves, raises, minimizes/restores, and changes the workspace of the Quota Float window only. It never moves, minimizes, raises, or changes the workspace of ChatGPT or another application.
 
-The app enables the installed extension when it starts in a GNOME session and disables it when the app exits. Users can also control it explicitly:
+In a GNOME session, the app makes a best-effort attempt to enable the installed extension at startup and disable it on a normal exit. A crash, forced termination, or system policy can prevent cleanup, so users can also control it explicitly:
 
 ```bash
 gnome-extensions disable quota-float-anchor@quotafloat.app
@@ -39,6 +39,10 @@ Quota Float stores only widget preferences in its own application config directo
 - always-on-top preference;
 - pinned provider and auto-rotate interval;
 - interface language.
+
+Older preference files may contain the retired `locked` field. Current versions ignore it and omit it the next time preferences are saved.
+
+If the user enables Start at login, the autostart plugin creates the platform's standard login-start registration, such as an XDG autostart entry on Linux. Disabling the option removes that registration.
 
 It does not copy or persist Codex tokens, account IDs, raw quota responses, user prompts, chat history, or local auth paths.
 

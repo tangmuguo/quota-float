@@ -1,37 +1,32 @@
-# Quota Float · Ubuntu 26.04 项目简介
+# Quota Float 项目简介
 
-## 一句话定位
+## 定位
 
-Quota Float 是一个面向 Ubuntu 26.04 的 Tauri 2 额度组件。它通过本机已有的 Codex 登录态只读查询额度，并在 ChatGPT 桌面版窗口右下角以卡片或紧凑圆球显示每周额度、重置时间、重置机会和会员类型。
+Quota Float 是一个跨平台 Tauri 2 Codex 额度组件。它通过本机已有登录态只读查询额度，并用卡片或紧凑圆球显示周额度、重置时间、重置机会和套餐类型。
 
-## 技术栈
+## 平台架构
 
-- 前端：React 19、TypeScript、Vite、Phosphor Icons。
-- 桌面壳：Tauri 2、Rust、GTK/WebKitGTK。
-- 网络：Rust `reqwest` 只读调用 ChatGPT 额度接口。
-- 打包：Ubuntu 26.04 原生 Debian (`.deb`) 包。
-- 测试：Vitest 覆盖前端格式化、快照合并和面板状态；Rust 覆盖额度解析、尺寸事务和桌面环境识别。
+- 共享层：React 19、TypeScript、Vite、Rust、`reqwest`、偏好、托盘和额度解析。
+- Windows：`src-tauri/src/codex_host.rs` 负责原生 ChatGPT/Codex 宿主跟随；发布 MSI/NSIS。
+- macOS：使用共享窗口路径；发布 universal app/DMG。
+- Ubuntu 26.04：`src-tauri/src/ubuntu_host.rs` 与 `src-tauri/gnome-extension/` 负责 GNOME Wayland 尺寸和锚定；发布 `.deb`。
 
-## Ubuntu 桌面行为
+平台通用 Tauri 配置位于 `src-tauri/tauri.conf.json`；Linux 专用覆盖位于 `src-tauri/tauri.linux.conf.json`，因此 Ubuntu 支持不会替换其他平台。
 
-- 无边框、透明的小组件由 GNOME Shell 扩展锚定到 ChatGPT 桌面版窗口的右下角，而不是作为独立桌面置顶窗显示。
-- 扩展在 Mutter 合成器层读取两个窗口的边框几何，并在 ChatGPT 移动、缩放、切换工作区或恢复时同步组件位置。
-- 320 × 320 面板和 100 × 100 圆球切换只发出尺寸请求；扩展依据实际新尺寸重新锚定，避免客户端 resize + move 竞争。
-- ChatGPT 不在前台时组件最小化；显示/隐藏仍可从托盘操作。
-- 托盘菜单支持显示/隐藏、语言切换、开机启动和退出。
-- `tauri-plugin-autostart` 在 Linux 使用 XDG autostart 入口。
+## Ubuntu 行为
 
-## 关键文件
+- 扩展选择当前聚焦的 ChatGPT 窗口；组件获得焦点时保留刚才的宿主。
+- 身份字段逐项识别，可处理多个字段同时包含 `codex` 的窗口。
+- 组件只允许 320 × 320 和 100 × 100 两种原生尺寸。
+- 关闭窗口会持久化隐藏状态并同步托盘勾选；首次点击“显示面板”即可恢复。
+- 应用启动时启用扩展，退出时禁用；扩展仅操作 Quota Float 窗口。
 
-- `src/App.tsx`：刷新、退避、stale 状态、偏好保存与尺寸切换。
-- `src/components/QuotaCard.tsx`：完整面板和紧凑圆球。
-- `src/lib/bridge.ts`：浏览器 mock 与 Tauri command 桥接。
-- `src-tauri/src/codex.rs`：读取本地认证、调用并解析额度接口。
-- `src-tauri/src/ubuntu_host.rs`：尺寸事务和 GNOME Shell 扩展启用，不再向 Wayland 请求位置。
-- `src-tauri/gnome-extension/`：在 GNOME Shell/Mutter 侧将组件锚定到 ChatGPT 窗口。
-- `src-tauri/src/lib.rs`：偏好持久化、窗口命令、托盘、自启动和单实例恢复。
-- `src-tauri/tauri.conf.json`：Ubuntu 26.04 `.deb` 目标及其运行时依赖。
-- `.github/workflows/*.yml`：在 `ubuntu-26.04` runner 上测试、打包和发布。
+## 恢复与发布门禁
+
+- 错误页和托盘均提供手动刷新，绕过最长 30 分钟自动退避等待。
+- Windows、macOS 与 Ubuntu CI 均保留。
+- Ubuntu `.deb` 在上传前会被解包，扫描实际安装树中的禁用文件、密钥模式和本机构建路径。
+- 当前版本为 0.1.10，避免与已有 `v0.1.9` 标签冲突。
 
 ## 数据和安全边界
 
@@ -39,17 +34,15 @@ Quota Float 是一个面向 Ubuntu 26.04 的 Tauri 2 额度组件。它通过本
 - 不保存 Token、账户 ID、提示词、聊天记录、原始响应或认证文件路径。
 - 认证文件读取上限 256 KB，接口响应上限 1 MB；请求不跟随重定向。
 - 不兑换重置机会，不修改账户设置。
-- 接口为非公开只读接口；字段变化时显示不可用，而不是猜测额度。
 
 ## 验证命令
 
 ```bash
-npm ci
 npm test
 npm run build
-cargo test --manifest-path src-tauri/Cargo.toml
-npm run tauri dev
+cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+cargo test --locked --manifest-path src-tauri/Cargo.toml
 npm run tauri:ubuntu
+node scripts/verify-ubuntu-deb.mjs
 ```
-
-浏览器模式只能验证 mock 数据；真实额度、AppIndicator、自动启动和 GNOME Shell 的 ChatGPT 窗口锚定均需要 Ubuntu 26.04 桌面实机验证。

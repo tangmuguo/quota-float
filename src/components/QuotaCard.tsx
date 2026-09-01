@@ -138,7 +138,7 @@ export const QuotaCard = memo(function QuotaCard({
           <div className="status-icon" aria-hidden="true"><StatusIcon status={snapshot.status} expired={staleExpired} /></div>
           <strong>{snapshot.status === "signed_out" ? t.signedInRequired : staleExpired ? t.staleExpired : t.temporarilyUnavailable}</strong>
           <p>{message ?? t.errorUnavailable}</p>
-          {snapshot.status === "stale" ? (
+          {onRefresh ? (
             <button type="button" className="error-refresh-button" onMouseDown={(event) => event.stopPropagation()} onClick={onRefresh} disabled={!onRefresh} aria-label={t.refreshQuota}>
               <ArrowClockwise />
               <span>{t.refresh}</span>

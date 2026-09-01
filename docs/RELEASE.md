@@ -1,19 +1,34 @@
-# Ubuntu 26.04 发布说明
+# 发布说明
 
 ## 发布目标
 
-Quota Float 此分支仅发布 Ubuntu 26.04 x86_64 的原生 `.deb`。不构建 Windows、macOS、RPM 或 AppImage。
+Quota Float 同时保留 Windows、macOS 与 Ubuntu 26.04 发布路径：
 
-选择 `.deb` 是为了直接使用 Ubuntu 26.04 的 WebKitGTK 2.52、GTK 3 t64、Wayland、Ayatana AppIndicator 和 GNOME Shell 运行时；避免 AppImage 将旧的 GTK/Wayland/GStreamer 组件带入现代 Ubuntu 会话。
+- Windows：MSI + NSIS；
+- macOS：universal app + DMG；
+- Ubuntu 26.04 x86_64：原生 `.deb`（Linux 不生成 AppImage）；
+- 全部产物：`SHA256SUMS.txt`。
 
-发布产物：
+平台通用配置位于 `src-tauri/tauri.conf.json`，Ubuntu 专用窗口和 Debian 配置位于 `src-tauri/tauri.linux.conf.json`。
 
-- `quota-float_<version>_amd64.deb`
-- `SHA256SUMS.txt`
+## Ubuntu 本地构建
 
-## 本地构建
+先安装开发依赖：
 
-在 Ubuntu 26.04 安装开发依赖后运行：
+```bash
+sudo apt update
+sudo apt install \
+  libwebkit2gtk-4.1-dev \
+  build-essential \
+  curl \
+  wget \
+  file \
+  libssl-dev \
+  libayatana-appindicator3-dev \
+  librsvg2-dev
+```
+
+再执行：
 
 ```bash
 npm ci
@@ -21,53 +36,58 @@ npm test
 npm run build
 cargo test --locked --manifest-path src-tauri/Cargo.toml
 npm run tauri:ubuntu
+node scripts/verify-ubuntu-deb.mjs
 ```
 
-生成的安装包位于：
+产物位于 `src-tauri/target/release/bundle/deb/`。标准化和验证脚本按当前版本选择 `.deb`，因此目录中可以安全保留旧版本测试包。
 
-```text
-src-tauri/target/release/bundle/deb/
-```
+## Windows 与 macOS 构建
 
-安装验证使用：
+在对应主机运行：
 
 ```bash
-sudo apt install ./src-tauri/target/release/bundle/deb/quota-float_*_amd64.deb
+npm ci
+npm test
+cargo test --locked --manifest-path src-tauri/Cargo.toml
+npm run tauri -- build
 ```
+
+macOS CI 额外安装 `aarch64-apple-darwin` 与 `x86_64-apple-darwin`，并构建 universal 目标。
 
 ## GitHub Release
 
-推送 `v*` tag 将触发 `.github/workflows/release.yml`：
+版本文件必须一致且使用尚未占用的标签，例如当前版本：
 
 ```bash
-git tag v0.1.9
-git push origin v0.1.9
+git tag v0.1.10
+git push origin v0.1.10
 ```
 
-工作流固定使用 `ubuntu-26.04` runner，并执行：
+发布工作流会：
 
-- 版本一致性和高置信度密钥扫描；
-- 前端测试、构建和依赖审计；
-- Rust Clippy 与单元测试；
-- Ubuntu 系统依赖安装；
-- `.deb` 构建、运行时依赖检查、本机构建路径扫描和包内容扫描；
-- SHA-256 生成与 GitHub Draft Release 创建。
+1. 校验 tag、npm、Cargo、Tauri 和发布模板版本；
+2. 扫描源码中的高置信度密钥；
+3. 在 Windows、macOS 与 Ubuntu runner 上执行测试、Clippy 和构建；
+4. 对 Windows/macOS bundle 扫描本机构建路径；
+5. 解包 Ubuntu `.deb`，扫描实际安装文件树中的禁用文件、高置信度密钥和本机构建路径，并核验依赖与扩展文件；
+6. 核验三平台附件，生成 SHA-256，创建 Draft Release。
 
-草稿 Release 不会自动公开。完成实机安装检查后，再在 GitHub 中人工发布。
+草稿不会自动公开。实机检查完成后再人工发布。
 
 ## Ubuntu 26.04 实机检查
 
-1. 使用 `apt install ./package.deb` 安装，确认依赖被正确解析；注销并重新登录，让 GNOME Shell 扫描随包扩展。
-2. 在已登录 Codex 的账户中启动，确认额度读取和错误状态不会泄露敏感数据。
-3. 在 GNOME Wayland 中确认 `quota-float-anchor@quotafloat.app` 已启用，组件可点击且位于活动 ChatGPT 窗口右下角。
-4. 确认 ChatGPT 的移动、缩放、最小化、恢复、工作区切换以及面板收起/展开都会保持正确锚定。
-5. 检查 AppIndicator 可用时的菜单，以及显示/隐藏恢复路径。
-6. 切换开机启动并重新登录，检查 XDG autostart 行为。
-7. 校验 `sha256sum -c SHA256SUMS.txt`。
+1. 使用 `apt install ./package.deb` 安装，确认依赖可解析；首次安装/更新扩展后注销并重新登录。
+2. 确认扩展随应用启动而启用、随应用退出而禁用，并测试手动启用/禁用与卸载。
+3. 多开 ChatGPT，聚焦不同大小的窗口，确认组件始终跟随当前活动窗口。
+4. 验证 ChatGPT 移动、缩放、最小化、恢复和工作区切换。
+5. 验证 320 × 320 / 100 × 100 两档切换，确认无法拖到中间尺寸。
+6. 关闭组件窗口后，确认托盘勾选取消且第一次点击“显示面板”即可恢复。
+7. 在未登录、断网和服务错误状态下确认错误页与托盘“立即刷新”均可恢复。
+8. 校验 `sha256sum -c SHA256SUMS.txt`。
 
-## 维护原则
+## 跨平台发布门槛
 
-- 默认使用 Ubuntu 26.04 原生 Wayland 路径，由 GNOME Shell 扩展完成 ChatGPT 窗口锚定。
-- 平台相关逻辑只保留在 `src-tauri/src/ubuntu_host.rs` 与 Tauri 壳层。
-- 前端视觉调整继续放在共享 React/CSS 层。
-- 不增加遥测、令牌存储、原始响应日志或账号设置写操作。
+- Windows 宿主跟随、MSI 与 NSIS 构建通过；
+- macOS universal app 与 DMG 构建通过；
+- Ubuntu `.deb`、GNOME Wayland 锚定和扩展生命周期通过；
+- 三平台 CI 全部通过，严重和高风险问题清零。

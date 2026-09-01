@@ -1,63 +1,43 @@
-# GitHub 发布与分享清单（Ubuntu 26.04）
+# GitHub 发布与分享清单
 
-## 本地准备
+## CI 环境
 
-- Ubuntu 26.04 x86_64
-- Git、Node.js 20+、Rust stable
-- Tauri 的 Ubuntu 26.04 开发依赖（见根目录 README）
-- 已通过 `npm ci` 安装前端依赖
+GitHub Actions 必须允许以下三类桌面 job 运行：
 
-GitHub 需要一个仓库，并启用 GitHub Actions。工作流使用 `ubuntu-26.04` runner，不需要 Windows 或 macOS 构建机。
+- `windows-latest`：MSI 与 NSIS；
+- `macos-latest`：universal app 与 DMG；
+- `ubuntu-26.04`：Ubuntu 26.04 x86_64 `.deb` 与 GNOME 扩展。
 
-## 第一次上传到 GitHub
+若 Actions 显示“等待维护者批准”，不得把它视为通过。
 
-若仓库尚无 remote：
+## 版本与标签
 
-```bash
-git remote add origin https://github.com/<owner>/<repo>.git
-git branch -M main
-git add .
-git commit -m "Prepare Ubuntu 26.04 release"
-git push -u origin main
-```
+- [ ] `package.json`、`package-lock.json`、`Cargo.toml`、`Cargo.lock`、`tauri.conf.json` 和发布模板版本一致。
+- [ ] 标签尚未存在，且与版本完全匹配；当前示例为 `v0.1.10`。
+- [ ] `node scripts/verify-release-version.mjs` 通过。
 
-若已有 remote：
+## 自动门禁
 
-```bash
-git add .
-git commit -m "Prepare Ubuntu 26.04 release"
-git push origin main
-```
+- [ ] 前端测试、Web build 与依赖审计通过。
+- [ ] Rust 格式、Clippy 与测试通过。
+- [ ] Windows 和 macOS 原生 bundle 构建通过。
+- [ ] Ubuntu `.deb` 构建、依赖字段和扩展文件检查通过。
+- [ ] `.deb` 已解包扫描实际文件内容和路径，而不是只扫描压缩包字符串。
+- [ ] Windows/macOS bundle 不包含本机构建路径。
+- [ ] Release 草稿包含且只包含一个 Windows zip、一个 macOS zip、一个 `.deb` 和 `SHA256SUMS.txt`。
 
-## 生成可分享版本
+## 实机验证
 
-推送与版本一致的标签：
+- [ ] Windows：ChatGPT/Codex 宿主跟随、显示/隐藏、MSI/NSIS 安装。
+- [ ] macOS：universal app、DMG、托盘与显示/隐藏。
+- [ ] Ubuntu：`apt install`、GNOME 扩展启停/卸载、Wayland 多窗口锚定、两档尺寸、托盘关闭恢复、手动刷新。
+- [ ] 三个平台都验证偏好升级不会丢失现有设置。
 
-```bash
-git tag v0.1.9
-git push origin v0.1.9
-```
+## 发布附件
 
-工作流成功后会创建 draft release，附件应包含：
-
-- 一个 `quota-float_<version>_amd64.deb`
+- `quota-float-windows-unsigned.zip`
+- `quota-float-macos-universal-unsigned.zip`
+- Ubuntu 26.04 x86_64 `.deb`
 - `SHA256SUMS.txt`
 
-先核对版本、SHA-256、隐私扫描和 Ubuntu 26.04 实机安装结果，再点击 Publish release。
-
-## 发给 Ubuntu 用户的安装说明
-
-1. 下载 `.deb` 和 `SHA256SUMS.txt`。
-2. 可选：在下载目录执行 `sha256sum -c SHA256SUMS.txt`。
-3. 使用 `sudo apt install ./quota-float_<version>_amd64.deb` 安装，不要只使用 `dpkg -i`。
-4. 在同一台电脑登录 Codex 后，从应用列表启动 Quota Float Ubuntu。
-5. 确认 `quota-float-anchor@quotafloat.app` 已启用，并在 ChatGPT 前台时将组件锚定到其右下角。
-
-## 发布前确认
-
-- [ ] 前端测试和 Web build 通过。
-- [ ] Rust 测试和 Clippy 通过。
-- [ ] Ubuntu 26.04 `.deb` 已生成且依赖字段正确。
-- [ ] GNOME Wayland 完成安装、扩展启用和 ChatGPT 窗口行为检查。
-- [ ] 显示/隐藏、AppIndicator（若可用）、开机启动和语言切换已验证。
-- [ ] 版本一致性、包内容、SHA-256 和隐私扫描通过。
+草稿附件、哈希、隐私扫描和实机结果全部确认后再点击 Publish release。

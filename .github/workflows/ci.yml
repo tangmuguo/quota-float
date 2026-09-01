@@ -6,7 +6,7 @@ on:
 
 jobs:
   frontend:
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -17,6 +17,43 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm audit --audit-level=high
+
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact-name: quota-float-windows-unsigned
+            build-command: npm run tauri -- build -- --locked
+            artifact-path: src-tauri/target/release/bundle/**
+          - os: macos-latest
+            artifact-name: quota-float-macos-universal-unsigned
+            build-command: npm run tauri -- build --target universal-apple-darwin -- --locked
+            artifact-path: src-tauri/target/universal-apple-darwin/release/bundle/**
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install macOS universal targets
+        if: runner.os == 'macOS'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - run: cargo test --locked --manifest-path src-tauri/Cargo.toml
+      - run: ${{ matrix.build-command }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: ${{ matrix.artifact-path }}
+          if-no-files-found: error
+          retention-days: 14
 
   ubuntu-desktop:
     runs-on: ubuntu-26.04
@@ -46,11 +83,16 @@ jobs:
           workspaces: src-tauri
       - run: npm ci
       - run: cargo test --locked --manifest-path src-tauri/Cargo.toml
-      - run: npm run tauri -- build --bundles deb -- --locked
-      - run: node scripts/normalize-ubuntu-deb.mjs
+      - name: Build Ubuntu Debian package without local paths
+        shell: bash
+        run: |
+          export RUSTFLAGS="--remap-path-prefix=$GITHUB_WORKSPACE=/src --remap-path-prefix=$HOME=/build"
+          npm run tauri -- build --bundles deb -- --locked
+          node scripts/normalize-ubuntu-deb.mjs
+          node scripts/verify-ubuntu-deb.mjs
       - uses: actions/upload-artifact@v4
         with:
-          name: quota-float-ubuntu-26.04-deb
+          name: quota-float-ubuntu-26.04-unsigned
           path: src-tauri/target/release/bundle/deb/*.deb
           if-no-files-found: error
           retention-days: 14

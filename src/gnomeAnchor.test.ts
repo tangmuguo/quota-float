@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   BOTTOM_RIGHT_MARGIN,
+  isChatGptIdentity,
+  isQuotaFloatIdentity,
   needsMove,
+  selectHostCandidate,
   targetFrame,
 } from "../src-tauri/gnome-extension/quota-float-anchor@quotafloat.app/anchor.js";
 
@@ -33,5 +36,28 @@ describe("GNOME Shell ChatGPT anchor", () => {
 
     expect(target).toEqual({ x: 956, y: 596 });
     expect(needsMove(current, target)).toBe(false);
+  });
+
+  it("recognizes ChatGPT when several identity fields independently contain codex", () => {
+    expect(isChatGptIdentity(["codex", "codex", "com.openai.codex", null])).toBe(true);
+    expect(isQuotaFloatIdentity(["quota-float", "app.quotafloat.desktop"])).toBe(true);
+    expect(isChatGptIdentity(["org.gnome.Terminal", "terminal"])).toBe(false);
+  });
+
+  it("anchors to the focused ChatGPT window even when another window is larger", () => {
+    const larger = { id: "large" };
+    const focused = { id: "focused-small" };
+    const widget = { id: "widget" };
+
+    expect(selectHostCandidate([larger, focused], focused, widget, larger)).toBe(focused);
+  });
+
+  it("retains the last host while the user interacts with the widget", () => {
+    const recent = { id: "recent" };
+    const lastHost = { id: "last" };
+    const widget = { id: "widget" };
+
+    expect(selectHostCandidate([recent, lastHost], widget, widget, lastHost)).toBe(lastHost);
+    expect(selectHostCandidate([recent], widget, widget, null)).toBe(recent);
   });
 });

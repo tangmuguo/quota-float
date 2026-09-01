@@ -15,7 +15,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 npm run build
 ```
 
-Use `npm run tauri dev` for Ubuntu 26.04 desktop testing. Browser preview uses mock data and cannot verify real quota reads.
+Use `npm run tauri dev` for desktop testing on the current platform. Ubuntu GNOME anchoring and the Debian package still require Ubuntu 26.04; browser preview uses mock data and cannot verify real quota reads.
 
 ## Pull Requests
 

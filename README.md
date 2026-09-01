@@ -1,116 +1,107 @@
-# Quota Float for Ubuntu 26.04
+# Quota Float
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-An Ubuntu 26.04 widget that reads the existing local Codex login state and shows the remaining Codex quota in the lower-right corner of the ChatGPT desktop window.
+A small cross-platform desktop widget that reads the existing local Codex login state and displays remaining quota, reset time, and reset-credit information.
 
 ![Quota Float quota states](docs/images/quota-states.png)
 
-## Ubuntu-first behavior
+## Platform support
 
-- Targets Ubuntu 26.04 LTS on x86_64 and ships as a native Debian package (`.deb`).
-- Uses the Ubuntu/GTK runtime stack (`WebKitGTK 4.1`, GTK 3 t64, Ayatana AppIndicator) instead of an AppImage.
-- Uses a packaged GNOME Shell extension to anchor the widget 24 px from the active ChatGPT window's lower-right corner. This works in the native GNOME Wayland session instead of relying on a client-side position request that Mutter can reject.
-- Follows the ChatGPT window as it moves, resizes, changes workspace, minimizes, and restores. The widget is not a free-floating all-workspaces desktop overlay.
-- Changes panel size in a size-only native transaction. The Shell extension moves the already-resized frame on its next compositor tick, avoiding the resize-and-reposition hang seen on Wayland.
-- Includes tray controls for show/hide, switch language, configure login autostart, and quit.
+- **Windows:** preserves the native ChatGPT/Codex host-following implementation and produces MSI and NSIS installers.
+- **macOS:** produces universal Apple Silicon/Intel app and DMG bundles.
+- **Ubuntu 26.04 x86_64:** produces a native `.deb` and uses a bundled GNOME Shell extension to anchor the widget to the active ChatGPT window under Wayland.
+
+Ubuntu support is an additional platform path. Shared React, quota, preference, tray, and release logic remains available to Windows and macOS.
 
 ## What it shows
 
 - Codex plan, weekly remaining quota, next reset time, and reset-credit information when the service provides it.
 - Healthy, caution, critical, stale, signed-out, and unavailable states.
 - A 320 × 320 full panel and a 100 × 100 compact quota orb.
-- Persistent preferences for panel size, visibility, language, and provider rotation.
+- Persistent preferences for panel visibility/size, always-on-top, language, and provider rotation.
+- Manual refresh from error states and the tray, so recovery is not blocked by automatic retry backoff.
 
-## Install
+## Ubuntu installation
 
-Download the Ubuntu 26.04 `.deb` from the release page, then install it with `apt` so runtime dependencies are resolved:
+Download the Ubuntu 26.04 `.deb`, then install it with `apt` so runtime dependencies are resolved:
 
 ```bash
 sudo apt install ./quota-float_*_amd64.deb
 ```
 
-Sign in to Codex on the same machine first. After the initial `.deb` install or an extension update, log out and back in once so GNOME Shell can scan the system extension, then start Quota Float; the app enables it for the current user. If it was disabled manually, restore it with:
+Sign in to Codex on the same machine first. After the initial extension install or update, log out and back in once so GNOME Shell can scan it. Quota Float enables the extension when the app starts and disables it when the app exits. It can also be controlled manually:
 
 ```bash
+gnome-extensions disable quota-float-anchor@quotafloat.app
 gnome-extensions enable quota-float-anchor@quotafloat.app
 ```
 
-The package declares the Ubuntu 26.04 runtime dependencies it needs, including `libwebkit2gtk-4.1-0`, `libgtk-3-0t64`, `libayatana-appindicator3-1`, and GNOME Shell 48 or newer.
+Uninstalling the package removes the app and extension files:
 
-## Placement on GNOME Wayland
+```bash
+sudo apt remove quota-float-ubuntu
+```
 
-Wayland correctly prevents an ordinary app from embedding itself in another app or forcing an arbitrary screen coordinate. Quota Float therefore delegates only this placement task to its small, local GNOME Shell extension. The extension identifies the Quota Float and ChatGPT desktop windows, then moves the existing Quota Float frame to the ChatGPT frame's lower-right corner. It neither reads window contents nor uses network access.
+The package declares Ubuntu 26.04 runtime dependencies including `libwebkit2gtk-4.1-0`, `libgtk-3-0t64`, `libayatana-appindicator3-1`, and GNOME Shell 48 or newer.
 
-The widget is visible while ChatGPT is the active desktop app (or while you interact with the widget itself), follows panel size changes automatically, and hides with ChatGPT rather than remaining in the middle of the desktop. GNOME Shell versions 48–50 are supported by the bundled extension.
+## GNOME Wayland placement
 
-## How it works
+Wayland prevents an ordinary app from forcing an arbitrary cross-application coordinate. Quota Float therefore delegates placement to a small local GNOME Shell extension. The extension selects the focused ChatGPT window, keeps the widget 24 px from its lower-right corner, and preserves that host while the user interacts with the widget.
+
+The Linux window remains technically resizable so GTK accepts programmatic mode changes, but its native minimum and maximum are pinned to the selected 320 × 320 or 100 × 100 mode. Intermediate manual sizes are not allowed.
+
+To identify the two windows, the extension examines limited identity, focus, workspace, minimized-state, and frame metadata from GNOME's top-level window list. It does not read window contents or use network access. See [PRIVACY.md](PRIVACY.md) for the exact boundary and lifecycle.
+
+## How quota access works
 
 Quota Float reads one existing local login file:
 
 - `$CODEX_HOME/auth.json`, when `CODEX_HOME` is set;
 - otherwise `~/.codex/auth.json`.
 
-It uses that existing session only to call the Codex/ChatGPT quota endpoints. It does not estimate quota from token counts, redeem reset credits, change account settings, or save credentials.
-
-Browser preview uses mock data. Real quota reads require the packaged Tauri desktop app and a local Codex login.
+It uses that existing session only to call the Codex/ChatGPT quota endpoints. It does not estimate quota from token counts, redeem reset credits, change account settings, or save credentials. Browser preview uses mock data; real quota reads require the Tauri desktop app and a local Codex login.
 
 ## Development
 
-Install Ubuntu 26.04 development dependencies once:
-
-```bash
-sudo apt update
-sudo apt install \
-  libwebkit2gtk-4.1-dev \
-  build-essential \
-  curl \
-  wget \
-  file \
-  libssl-dev \
-  libayatana-appindicator3-dev \
-  librsvg2-dev
-```
-
-Then install Node.js 20+, Rust stable, and project dependencies:
+Install Node.js 20+, Rust stable, and project dependencies, then run:
 
 ```bash
 npm ci
 npm test
 npm run build
-cargo test --manifest-path src-tauri/Cargo.toml
+cargo test --locked --manifest-path src-tauri/Cargo.toml
 npm run tauri dev
 ```
 
+Ubuntu 26.04 additionally needs the Tauri GTK/WebKit development packages listed in [the release guide](docs/RELEASE.md).
+
 ## Build
 
-Create the Ubuntu package with:
+Build the native bundles for the current Windows or macOS host with:
+
+```bash
+npm run tauri -- build
+```
+
+Build the Ubuntu Debian package with:
 
 ```bash
 npm run tauri:ubuntu
 ```
 
-The result is written under:
-
-```text
-src-tauri/target/release/bundle/deb/
-```
-
-The repository intentionally builds only a `.deb`: current AppImage packaging can conflict with Ubuntu 26.04's modern Wayland, Mesa, GLib, and WebKitGTK stack.
-
-## Privacy and accuracy
-
-- Only widget preferences are stored in the app configuration directory.
-- Tokens, account IDs, prompts, chats, raw quota responses, and auth paths are not stored or logged.
-- The quota service is not a public stable API. If the login or response format changes, the widget shows a safe unavailable or stale state instead of inventing a value.
-
-See [PRIVACY.md](PRIVACY.md) and [SECURITY.md](SECURITY.md) for the complete boundary.
+The Ubuntu package is written under `src-tauri/target/release/bundle/deb/`. Linux intentionally targets `.deb` instead of AppImage; that Linux-specific choice does not remove Windows or macOS bundles.
 
 ## Release
 
-GitHub Actions validates and packages this Ubuntu 26.04 build on the `ubuntu-26.04` runner. Pushing a `v*` tag creates a draft release containing one `.deb` and `SHA256SUMS.txt`.
+CI covers the shared frontend plus Windows, macOS, and Ubuntu desktop builds. A matching `v*` tag creates a draft release containing:
 
-See [docs/RELEASE.md](docs/RELEASE.md) before publishing.
+- a Windows archive with one MSI and one NSIS installer;
+- a macOS archive with one universal app and one DMG;
+- one Ubuntu 26.04 `.deb`;
+- `SHA256SUMS.txt`.
+
+The Ubuntu gate extracts the `.deb` and scans the installed file tree for forbidden files, high-confidence secrets, and local build paths before upload. See [docs/RELEASE.md](docs/RELEASE.md) before publishing.
 
 ## License
 

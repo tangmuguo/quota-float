@@ -23,6 +23,7 @@ export interface ProviderSnapshot {
 export interface WidgetPreferences {
   panelVisible: boolean;
   expanded: boolean;
+  alwaysOnTop: boolean;
   pinnedProvider: ProviderId | null;
   autoRotateSeconds: number;
   language: Language;

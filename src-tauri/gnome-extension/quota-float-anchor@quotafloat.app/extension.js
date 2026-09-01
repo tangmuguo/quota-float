@@ -2,50 +2,37 @@ import GLib from 'gi://GLib';
 import Meta from 'gi://Meta';
 
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
-import {needsMove, targetFrame} from './anchor.js';
+import {
+    isChatGptIdentity,
+    isQuotaFloatIdentity,
+    needsMove,
+    selectHostCandidate,
+    targetFrame,
+} from './anchor.js';
 
-const SYNC_INTERVAL_MS = 120;
+const SYNC_INTERVAL_MS = 250;
 
-function identityFor(window) {
+function identitiesFor(window) {
     return [
         window.get_wm_class(),
         window.get_wm_class_instance(),
         window.get_gtk_application_id(),
         window.get_sandboxed_app_id(),
-    ].filter(value => value).join(' ').toLowerCase();
+    ];
 }
 
 function isQuotaFloat(window) {
-    const identity = identityFor(window);
-    return identity.includes('app.quotafloat.desktop') ||
-        identity.includes('quota-float') ||
-        identity.includes('quotafloat');
+    return isQuotaFloatIdentity(identitiesFor(window));
 }
 
 function isChatGpt(window) {
-    const identity = identityFor(window);
-    if (identity.includes('chatgpt') || identity.includes('openai'))
-        return true;
-
-    // The current Linux desktop client is launched as `chatgpt`, while some
-    // builds expose only `codex` in their GTK application identifier.
-    return identity === 'codex' || identity.endsWith('.codex');
+    return isChatGptIdentity(identitiesFor(window));
 }
 
 function isVisibleOnActiveWorkspace(window, workspace) {
     return !window.minimized &&
         (window.is_on_all_workspaces() || window.get_workspace() === workspace) &&
         window.showing_on_its_workspace();
-}
-
-function largestWindow(windows) {
-    return windows.reduce((largest, candidate) => {
-        const largestRect = largest.get_frame_rect();
-        const candidateRect = candidate.get_frame_rect();
-        return candidateRect.width * candidateRect.height > largestRect.width * largestRect.height
-            ? candidate
-            : largest;
-    });
 }
 
 export default class QuotaFloatChatGptAnchor extends Extension {
@@ -86,19 +73,7 @@ export default class QuotaFloatChatGptAnchor extends Extension {
             return null;
 
         const focused = global.display.get_focus_window();
-        // Match the Windows host lookup, which selects the largest visible
-        // ChatGPT top-level window rather than a small modal or dialog.
-        if (hosts.includes(focused))
-            return largestWindow(hosts);
-
-        // Interaction with the widget itself moves focus away from ChatGPT;
-        // retain its last active host during that interaction.
-        if (focused === widget && hosts.includes(this._lastHost))
-            return this._lastHost;
-
-        // Starting Quota Float gives its own window focus. Choose the same
-        // largest host window as the Windows implementation in that case.
-        return focused === widget ? largestWindow(hosts) : null;
+        return selectHostCandidate(hosts, focused, widget, this._lastHost);
     }
 
     _sync() {

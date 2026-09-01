@@ -45,12 +45,17 @@ pub struct WidgetPreferences {
     pub panel_visible: bool,
     #[serde(default = "default_expanded")]
     pub expanded: bool,
+    #[serde(default = "default_always_on_top")]
+    pub always_on_top: bool,
     pub pinned_provider: Option<String>,
     pub auto_rotate_seconds: u64,
     #[serde(default = "default_language")]
     pub language: String,
 }
 
+fn default_always_on_top() -> bool {
+    true
+}
 fn default_panel_visible() -> bool {
     true
 }
@@ -66,6 +71,7 @@ impl Default for WidgetPreferences {
         Self {
             panel_visible: true,
             expanded: true,
+            always_on_top: true,
             pinned_provider: None,
             auto_rotate_seconds: 12,
             language: default_language(),
@@ -91,13 +97,16 @@ mod tests {
     use super::WidgetPreferences;
 
     #[test]
-    fn older_preferences_keep_the_panel_visible() {
+    fn older_preferences_ignore_and_remove_the_retired_lock_setting() {
         let preferences: WidgetPreferences = serde_json::from_str(
-            r#"{"alwaysOnTop":true,"pinnedProvider":null,"autoRotateSeconds":12,"language":"zh-CN"}"#,
+            r#"{"locked":true,"alwaysOnTop":true,"pinnedProvider":null,"autoRotateSeconds":12,"language":"zh-CN"}"#,
         )
         .expect("older settings should remain readable");
 
         assert!(preferences.panel_visible);
         assert!(preferences.expanded);
+        assert!(preferences.always_on_top);
+        let serialized = serde_json::to_value(preferences).expect("settings should serialize");
+        assert!(serialized.get("locked").is_none());
     }
 }

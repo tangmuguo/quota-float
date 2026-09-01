@@ -19,6 +19,7 @@ import App from "./App";
 const preferences: WidgetPreferences = {
   panelVisible: true,
   expanded: true,
+  alwaysOnTop: true,
   pinnedProvider: null,
   autoRotateSeconds: 12,
   language: "en",

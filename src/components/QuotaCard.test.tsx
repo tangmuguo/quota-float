@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ProviderSnapshot } from "../types";
-import { QuotaOrb } from "./QuotaCard";
+import type { ProviderSnapshot, WidgetPreferences } from "../types";
+import { QuotaCard, QuotaOrb } from "./QuotaCard";
 
 const baseSnapshot: ProviderSnapshot = {
   provider: "codex",
@@ -18,6 +18,15 @@ const baseSnapshot: ProviderSnapshot = {
   updatedAt: "2026-07-14T00:00:00Z",
   status: "ok",
   message: null,
+};
+
+const preferences: WidgetPreferences = {
+  panelVisible: true,
+  expanded: true,
+  alwaysOnTop: true,
+  pinnedProvider: null,
+  autoRotateSeconds: 12,
+  language: "zh-CN",
 };
 
 function renderOrb(snapshot: ProviderSnapshot) {
@@ -83,4 +92,27 @@ describe("compact quota view", () => {
     expect(container.querySelector(".quota-orb")?.classList.contains("quota-orb--idle")).toBe(true);
   });
 
+});
+
+describe("manual recovery", () => {
+  it.each(["signed_out", "unavailable"] as const)("offers refresh for %s failures", (status) => {
+    const onRefresh = vi.fn();
+    render(
+      <QuotaCard
+        snapshot={{ ...baseSnapshot, status, weeklyWindow: null, message: `${status} message` }}
+        preferences={preferences}
+        providerCount={1}
+        onPrevious={() => undefined}
+        onNext={() => undefined}
+        onTogglePin={() => undefined}
+        onLanguage={() => undefined}
+        onHover={() => undefined}
+        onRefresh={onRefresh}
+        onToggleExpanded={() => undefined}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "刷新额度数据" }));
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+  });
 });

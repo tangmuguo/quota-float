@@ -32,8 +32,27 @@ pub fn apply_expanded(app: &AppHandle, expanded: bool) -> Result<(), String> {
         .get_webview_window("widget")
         .ok_or_else(|| "widget window missing".to_string())?;
     let size = logical_size(expanded);
+    let exact_size = tauri::LogicalSize::new(size, size);
+    // GTK/Wayland must keep the surface technically resizable so programmatic
+    // mode changes are honored. Pinning min/max to the selected mode prevents
+    // users from dragging the undecorated window to an in-between size.
+    if expanded {
+        window
+            .set_max_size(Some(exact_size))
+            .map_err(|_| "failed to update maximum widget size".to_string())?;
+        window
+            .set_min_size(Some(exact_size))
+            .map_err(|_| "failed to update minimum widget size".to_string())?;
+    } else {
+        window
+            .set_min_size(Some(exact_size))
+            .map_err(|_| "failed to update minimum widget size".to_string())?;
+        window
+            .set_max_size(Some(exact_size))
+            .map_err(|_| "failed to update maximum widget size".to_string())?;
+    }
     window
-        .set_size(tauri::LogicalSize::new(size, size))
+        .set_size(exact_size)
         .map_err(|_| "failed to resize widget".to_string())
 }
 
@@ -50,7 +69,7 @@ fn is_gnome_desktop(value: Option<&str>) -> bool {
 /// Enables the system-installed extension for the current desktop session.
 /// This is intentionally best-effort and runs off the Tauri event loop: an
 /// unavailable extension must never delay the widget or a panel resize.
-pub fn start() {
+pub fn start(_app: AppHandle) {
     if !is_gnome_desktop(env::var("XDG_CURRENT_DESKTOP").ok().as_deref()) {
         return;
     }
@@ -75,6 +94,27 @@ pub fn start() {
     });
 }
 
+/// Stops the session extension when the application exits. It is enabled again
+/// on the next launch, so the compositor helper does not keep inspecting window
+/// metadata while Quota Float is not running.
+pub fn stop() {
+    if !is_gnome_desktop(env::var("XDG_CURRENT_DESKTOP").ok().as_deref()) {
+        return;
+    }
+
+    match Command::new("gnome-extensions")
+        .args(["disable", SHELL_EXTENSION_UUID])
+        .output()
+    {
+        Ok(output) if output.status.success() => {}
+        Ok(output) => eprintln!(
+            "GNOME Shell anchor extension could not be disabled (status {})",
+            output.status
+        ),
+        Err(error) => eprintln!("GNOME Shell anchor extension could not be disabled: {error}"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{is_gnome_desktop, logical_size, COLLAPSED_WIDGET_SIZE, EXPANDED_WIDGET_SIZE};
@@ -94,15 +134,20 @@ mod tests {
     }
 
     #[test]
-    fn widget_allows_programmatic_resizing_on_gtk() {
-        let config: serde_json::Value =
-            serde_json::from_str(include_str!("../tauri.conf.json")).expect("valid Tauri config");
-        let resizable = config["app"]["windows"][0]["resizable"].as_bool();
+    fn linux_override_allows_programmatic_resizing_without_changing_other_platforms() {
+        let base: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).expect("valid base config");
+        let linux: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.linux.conf.json"))
+                .expect("valid Linux config");
 
         assert_eq!(
-            resizable,
-            Some(true),
-            "GTK locks a non-resizable Wayland window to its first mapped size"
+            base["app"]["windows"][0]["resizable"].as_bool(),
+            Some(false)
+        );
+        assert_eq!(
+            linux["app"]["windows"][0]["resizable"].as_bool(),
+            Some(true)
         );
     }
 }

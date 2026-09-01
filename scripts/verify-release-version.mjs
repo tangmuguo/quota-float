@@ -28,6 +28,7 @@ function readLockVersion(path, packageName) {
 const packageJson = readJson("package.json");
 const packageLock = readJson("package-lock.json");
 const tauriConfig = readJson("src-tauri/tauri.conf.json");
+const linuxTauriConfig = readJson("src-tauri/tauri.linux.conf.json");
 const expectedVersion = packageJson.version;
 const versions = [
   packageLock.version,
@@ -39,6 +40,10 @@ const versions = [
 
 if (versions.some((version) => version !== expectedVersion)) {
   throw new Error("Release version files are inconsistent");
+}
+
+if (tauriConfig.bundle?.targets !== "all" || linuxTauriConfig.bundle?.targets !== "deb") {
+  throw new Error("Base and Linux bundle targets must preserve desktop releases and the Ubuntu deb");
 }
 
 if (process.env.RELEASE_TAG && process.env.RELEASE_TAG !== `v${expectedVersion}`) {

@@ -21,6 +21,7 @@ Please do not open public issues containing tokens, account IDs, raw backend res
 Before publishing a release, verify:
 
 - Source archives do not include local installers, build outputs, `.codex`, QA screenshots, or environment files.
-- The Ubuntu 26.04 `.deb` is built by CI or a clean Ubuntu 26.04 machine.
-- The package dependency metadata includes only supported Ubuntu runtime libraries.
-- Release attachments include a SHA-256 checksum and are scanned for local paths and sensitive files.
+- Windows, macOS, and Ubuntu bundles are built by their matching CI runners or clean matching hosts.
+- The Ubuntu package dependency metadata includes only supported Ubuntu runtime libraries.
+- The Ubuntu `.deb` is extracted and its installed file tree is scanned for forbidden files, local paths, and high-confidence secrets.
+- Every release attachment is covered by `SHA256SUMS.txt`.

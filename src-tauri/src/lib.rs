@@ -1,6 +1,14 @@
 mod codex;
+#[cfg(not(target_os = "linux"))]
+mod codex_host;
 mod models;
+#[cfg(target_os = "linux")]
 mod ubuntu_host;
+
+#[cfg(not(target_os = "linux"))]
+use codex_host as platform_host;
+#[cfg(target_os = "linux")]
+use ubuntu_host as platform_host;
 
 use std::{
     fs,
@@ -28,10 +36,12 @@ pub(crate) struct AppState {
 }
 
 const TRAY_LANGUAGE_CHANGED_EVENT: &str = "tray-language-changed";
+const TRAY_PANEL_VISIBILITY_CHANGED_EVENT: &str = "tray-panel-visibility-changed";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct TrayLabels {
     show_panel: &'static str,
+    refresh: &'static str,
     language: &'static str,
     autostart: &'static str,
     quit: &'static str,
@@ -39,6 +49,7 @@ struct TrayLabels {
 
 struct TrayMenuItems<R: Runtime> {
     show_panel: CheckMenuItem<R>,
+    refresh: MenuItem<R>,
     language: MenuItem<R>,
     autostart: CheckMenuItem<R>,
     quit: MenuItem<R>,
@@ -48,6 +59,7 @@ fn tray_labels(language: &str) -> TrayLabels {
     if language == "en" {
         TrayLabels {
             show_panel: "Show quota panel",
+            refresh: "Refresh now",
             language: "Switch to Chinese",
             autostart: "Start at login",
             quit: "Quit",
@@ -55,6 +67,7 @@ fn tray_labels(language: &str) -> TrayLabels {
     } else {
         TrayLabels {
             show_panel: "显示额度面板",
+            refresh: "立即刷新",
             language: "切换到英文",
             autostart: "开机启动",
             quit: "退出",
@@ -67,6 +80,7 @@ fn apply_tray_labels<R: Runtime>(
     items: &TrayMenuItems<R>,
 ) -> tauri::Result<()> {
     items.show_panel.set_text(labels.show_panel)?;
+    items.refresh.set_text(labels.refresh)?;
     items.language.set_text(labels.language)?;
     items.autostart.set_text(labels.autostart)?;
     items.quit.set_text(labels.quit)?;
@@ -220,11 +234,11 @@ fn set_widget_expanded(
         .map_err(|_| "settings unavailable".to_string())?
         .clone();
     if previous.expanded == expanded {
-        ubuntu_host::apply_expanded(&app, expanded)?;
+        platform_host::apply_expanded(&app, expanded)?;
         return Ok(previous);
     }
 
-    ubuntu_host::apply_expanded(&app, expanded)?;
+    platform_host::apply_expanded(&app, expanded)?;
     let mut preferences = state
         .preferences
         .lock()
@@ -232,7 +246,7 @@ fn set_widget_expanded(
     let mut next = preferences.clone();
     next.expanded = expanded;
     if persist_preferences(&state.preferences_path, &next).is_err() {
-        return match ubuntu_host::apply_expanded(&app, previous.expanded) {
+        return match platform_host::apply_expanded(&app, previous.expanded) {
             Ok(()) => Err("failed to save panel size; previous layout restored".to_string()),
             Err(_) => Err(
                 "failed to save panel size and restore the previous layout; reopen the widget"
@@ -250,6 +264,7 @@ fn set_widget_expanded(
 fn apply_panel_visibility(app: &AppHandle, visible: bool) {
     if let Some(window) = app.get_webview_window("widget") {
         if visible {
+            #[cfg(not(windows))]
             let _ = window.show();
         } else {
             let _ = window.hide();
@@ -273,12 +288,42 @@ fn update_panel_visibility(app: &AppHandle, visible: bool) -> Result<WidgetPrefe
     drop(preferences);
     apply_panel_visibility(app, visible);
     let _ = app.emit_to("widget", "preferences-changed", next.clone());
+    let _ = app.emit(TRAY_PANEL_VISIBILITY_CHANGED_EVENT, visible);
     Ok(next)
 }
 
 #[tauri::command]
 fn set_panel_visible(visible: bool, app: AppHandle) -> Result<WidgetPreferences, String> {
     update_panel_visibility(&app, visible)
+}
+
+#[tauri::command]
+fn set_widget_always_on_top(
+    always_on_top: bool,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<WidgetPreferences, String> {
+    let previous = state
+        .preferences
+        .lock()
+        .map_err(|_| "settings unavailable".to_string())?
+        .clone();
+    let mut next = previous.clone();
+    next.always_on_top = always_on_top;
+    persist_preferences(&state.preferences_path, &next)?;
+    let window = app
+        .get_webview_window("widget")
+        .ok_or_else(|| "widget window missing".to_string())?;
+    if let Err(error) = window.set_always_on_top(always_on_top) {
+        let _ = persist_preferences(&state.preferences_path, &previous);
+        return Err(format!("failed to toggle always-on-top: {error}"));
+    }
+    *state
+        .preferences
+        .lock()
+        .map_err(|_| "settings unavailable".to_string())? = next.clone();
+    let _ = app.emit_to("widget", "preferences-changed", next.clone());
+    Ok(next)
 }
 
 fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
@@ -297,6 +342,7 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
         panel_visible,
         None::<&str>,
     )?;
+    let refresh = MenuItem::with_id(app, "refresh", labels.refresh, true, None::<&str>)?;
     let language = MenuItem::with_id(app, "language", labels.language, true, None::<&str>)?;
     let autostart_enabled = app.autolaunch().is_enabled().unwrap_or(false);
     let autostart = CheckMenuItem::with_id(
@@ -308,10 +354,10 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
         None::<&str>,
     )?;
     let quit = MenuItem::with_id(app, "quit", labels.quit, true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show_panel, &language, &autostart, &quit])?;
+    let menu = Menu::with_items(app, &[&show_panel, &refresh, &language, &autostart, &quit])?;
     let mut builder = TrayIconBuilder::with_id("main")
         .menu(&menu)
-        .tooltip("Quota Float · Ubuntu 26.04");
+        .tooltip("Quota Float");
     if let Some(icon) = app.default_window_icon() {
         builder = builder.icon(icon.clone());
     }
@@ -320,6 +366,7 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
     let show_panel_click_menu = show_panel.clone();
     let label_items = TrayMenuItems {
         show_panel: show_panel.clone(),
+        refresh: refresh.clone(),
         language: language.clone(),
         autostart: autostart.clone(),
         quit: quit.clone(),
@@ -330,6 +377,15 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
         };
         if apply_tray_labels(tray_labels(&language), &label_items).is_err() {
             eprintln!("tray language update failed");
+        }
+    });
+    let show_panel_event_menu = show_panel.clone();
+    app.listen(TRAY_PANEL_VISIBILITY_CHANGED_EVENT, move |event| {
+        let Ok(visible) = serde_json::from_str::<bool>(event.payload()) else {
+            return;
+        };
+        if show_panel_event_menu.set_checked(visible).is_err() {
+            eprintln!("tray panel visibility update failed");
         }
     });
     builder
@@ -351,6 +407,9 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
                     }
                     Err(_) => eprintln!("panel visibility update failed"),
                 }
+            }
+            "refresh" => {
+                let _ = app.emit_to("widget", "refresh-requested", ());
             }
             "language" => {
                 if let Some(state) = app.try_state::<AppState>() {
@@ -436,21 +495,27 @@ pub fn run() {
                 snapshot_cache: Mutex::new(None),
             });
             if setup_tray(app).is_err() {
-                eprintln!("tray setup failed");
+                eprintln!("tray setup failed; enabling taskbar fallback");
+                if let Some(window) = app.get_webview_window("widget") {
+                    let _ = window.set_skip_taskbar(false);
+                }
             }
             if let Some(window) = app.get_webview_window("widget") {
-                // The Shell extension owns stacking and workspace affinity so
-                // the widget stays with ChatGPT instead of becoming a desktop
-                // overlay when another application is focused.
-                let _ = window.set_skip_taskbar(true);
                 let _ = window.set_always_on_top(false);
-                let _ = window.set_visible_on_all_workspaces(false);
+                #[cfg(target_os = "linux")]
+                {
+                    // The Shell extension owns stacking and workspace affinity so
+                    // the widget stays with ChatGPT instead of becoming a desktop
+                    // overlay when another application is focused.
+                    let _ = window.set_skip_taskbar(true);
+                    let _ = window.set_visible_on_all_workspaces(false);
+                }
             }
-            if ubuntu_host::apply_expanded(app.handle(), preferences.expanded).is_err() {
+            if platform_host::apply_expanded(app.handle(), preferences.expanded).is_err() {
                 eprintln!("initial widget layout failed");
             }
             apply_panel_visibility(app.handle(), preferences.panel_visible);
-            ubuntu_host::start();
+            platform_host::start(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -459,20 +524,26 @@ pub fn run() {
             get_preferences,
             set_preferences,
             set_widget_expanded,
-            set_panel_visible
+            set_panel_visible,
+            set_widget_always_on_top
         ])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
-                let _ = window.hide();
+                if update_panel_visibility(window.app_handle(), false).is_err() {
+                    let _ = window.hide();
+                }
             }
         })
         .build(tauri::generate_context!())
         .expect("failed to build Quota Float");
-    app.run(|app_handle, event| {
-        if matches!(event, tauri::RunEvent::Resumed) {
+    app.run(|app_handle, event| match event {
+        tauri::RunEvent::Resumed => {
             let _ = app_handle.emit_to("widget", "refresh-requested", ());
         }
+        #[cfg(target_os = "linux")]
+        tauri::RunEvent::Exit => ubuntu_host::stop(),
+        _ => {}
     });
 }
 
@@ -486,6 +557,7 @@ mod tray_label_tests {
             tray_labels("en"),
             TrayLabels {
                 show_panel: "Show quota panel",
+                refresh: "Refresh now",
                 language: "Switch to Chinese",
                 autostart: "Start at login",
                 quit: "Quit",
@@ -497,6 +569,7 @@ mod tray_label_tests {
     fn returns_chinese_tray_labels_and_uses_them_as_the_fallback() {
         let expected = TrayLabels {
             show_panel: "显示额度面板",
+            refresh: "立即刷新",
             language: "切换到英文",
             autostart: "开机启动",
             quit: "退出",

@@ -1,116 +1,107 @@
-# Quota Float · Ubuntu 26.04
+# Quota Float
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-一款面向 Ubuntu 26.04 的 Codex 额度悬浮组件。它读取本机现有的 Codex 登录状态，并将剩余额度显示在 ChatGPT 桌面版窗口的右下角。
+一款跨平台 Codex 额度桌面组件，读取本机已有的 Codex 登录态，显示剩余额度、重置时间和重置机会。
 
 ![Quota Float 配额状态](docs/images/quota-states.png)
 
-## 为 Ubuntu 26.04 优化
+## 平台支持
 
-- 仅面向 x86_64 的 Ubuntu 26.04 LTS，发布原生 Debian 安装包（`.deb`）。
-- 使用 Ubuntu 的 GTK 运行时栈：WebKitGTK 4.1、GTK 3 t64、Ayatana AppIndicator；不发布 AppImage。
-- 通过随 `.deb` 安装的 GNOME Shell 扩展，在合成器层把组件固定在当前 ChatGPT 桌面版窗口右下角 24 px 边距处；原生 GNOME Wayland 不再依赖会被 Mutter 拒绝的客户端坐标请求。
-- 跟随 ChatGPT 窗口的移动、缩放、工作区切换、最小化和恢复；组件不是跨工作区、始终覆盖桌面的独立悬浮窗。
-- 面板缩放只执行原生尺寸切换，扩展在下一次合成器刷新中移动已缩放后的窗口，避免 Wayland 下“缩放 + 定位”导致的卡死。
-- 托盘菜单提供显示/隐藏、语言切换、开机启动和退出操作。
+- **Windows：**保留原有 ChatGPT/Codex 宿主窗口跟随实现，并生成 MSI 与 NSIS 安装包。
+- **macOS：**生成同时支持 Apple Silicon 与 Intel 的通用 App 和 DMG。
+- **Ubuntu 26.04 x86_64：**生成原生 `.deb`，并通过随包 GNOME Shell 扩展在 Wayland 下锚定到活动 ChatGPT 窗口。
+
+Ubuntu 是新增的平台路径；共享的 React 界面、额度读取、偏好、托盘和发布逻辑仍支持 Windows 与 macOS。
 
 ## 显示内容
 
 - Codex 套餐、本周剩余额度、下次重置时间，以及接口提供时的重置机会信息。
 - 正常、提醒、紧急、过期、未登录和暂不可用等状态。
 - 320 × 320 完整面板和 100 × 100 紧凑额度圆球。
-- 持久保存面板尺寸、显示状态、语言和自动轮换等偏好。
+- 持久保存显示/尺寸、置顶、语言和服务轮换等偏好。
+- 错误页与托盘均提供手动刷新，自动退避不会阻断恢复入口。
 
-## 安装
+## Ubuntu 安装
 
-从 Release 页面下载 Ubuntu 26.04 的 `.deb`，使用 `apt` 安装以自动处理运行时依赖：
+下载 Ubuntu 26.04 的 `.deb`，使用 `apt` 安装以自动解析运行时依赖：
 
 ```bash
 sudo apt install ./quota-float_*_amd64.deb
 ```
 
-请先在同一台电脑上登录 Codex。首次安装或更新 `.deb` 后，请注销并重新登录一次，让 GNOME Shell 扫描系统扩展，再启动 Quota Float；应用随后会为当前用户自动启用它。若曾手动禁用，可执行：
+请先在同一台电脑登录 Codex。首次安装或更新扩展后，请注销并重新登录一次，让 GNOME Shell 扫描扩展。Quota Float 启动时会启用扩展，应用退出时会禁用；也可手动控制：
 
 ```bash
+gnome-extensions disable quota-float-anchor@quotafloat.app
 gnome-extensions enable quota-float-anchor@quotafloat.app
 ```
 
-安装包会声明所需的 Ubuntu 26.04 运行时依赖，包括 `libwebkit2gtk-4.1-0`、`libgtk-3-0t64`、`libayatana-appindicator3-1` 和 GNOME Shell 48 以上版本。
+卸载会移除应用和扩展文件：
 
-## GNOME Wayland 的窗口位置
+```bash
+sudo apt remove quota-float-ubuntu
+```
 
-Wayland 正确地禁止普通应用嵌入另一个应用窗口，或强制任意屏幕坐标。Quota Float 因此仅把“定位”交给本地 GNOME Shell 扩展：扩展识别 Quota Float 与 ChatGPT 桌面版窗口，把现有的 Quota Float 窗口移动到 ChatGPT 窗口右下角。它不读取窗口内容，也不访问网络。
+安装包声明 Ubuntu 26.04 所需的 `libwebkit2gtk-4.1-0`、`libgtk-3-0t64`、`libayatana-appindicator3-1` 和 GNOME Shell 48 以上版本等依赖。
 
-组件在 ChatGPT 处于活动状态（或正在与组件交互）时显示；尺寸变化会自动重新锚定，ChatGPT 不在前台时不会留在桌面中央。随包扩展支持 GNOME Shell 48–50。
+## GNOME Wayland 窗口锚定
 
-## 工作原理
+Wayland 不允许普通应用强制设置跨应用坐标，因此 Quota Float 只把定位交给本地 GNOME Shell 扩展。扩展优先选择当前聚焦的 ChatGPT 窗口，将组件保持在其右下角 24 px 处；用户操作组件时继续沿用刚才的宿主窗口。
+
+Linux 窗口在技术上保持可调整，以便 GTK 接受程序化模式切换；但原生最小/最大尺寸会固定为当前的 320 × 320 或 100 × 100，只允许这两档，不允许手动调整到中间尺寸。
+
+为识别目标，扩展会检查 GNOME 顶层窗口列表中的有限应用身份、焦点、工作区、最小化状态和边框几何；不会读取窗口内容，也不会联网。完整边界与启停生命周期见 [PRIVACY.md](PRIVACY.md)。
+
+## 额度读取方式
 
 Quota Float 只读取已有的本机登录文件：
 
 - 已设置 `CODEX_HOME` 时：`$CODEX_HOME/auth.json`；
 - 否则：`~/.codex/auth.json`。
 
-它仅使用已有会话调用 Codex/ChatGPT 额度接口；不会按本地 Token 数估算额度、兑换重置机会、修改账户设置，也不会保存凭据。
+它仅使用已有会话调用 Codex/ChatGPT 额度接口；不会按本地 Token 数估算额度、兑换重置机会、修改账户设置或保存凭据。浏览器预览使用模拟数据；真实额度需要 Tauri 桌面应用和本机 Codex 登录态。
 
-浏览器预览模式使用模拟数据。读取真实额度需要运行 Tauri 桌面应用，并且本机已经登录 Codex。
+## 开发
 
-## 开发环境
-
-先安装 Ubuntu 26.04 的系统依赖：
-
-```bash
-sudo apt update
-sudo apt install \
-  libwebkit2gtk-4.1-dev \
-  build-essential \
-  curl \
-  wget \
-  file \
-  libssl-dev \
-  libayatana-appindicator3-dev \
-  librsvg2-dev
-```
-
-再准备 Node.js 20+、Rust stable，并执行：
+准备 Node.js 20+、Rust stable 和项目依赖后执行：
 
 ```bash
 npm ci
 npm test
 npm run build
-cargo test --manifest-path src-tauri/Cargo.toml
+cargo test --locked --manifest-path src-tauri/Cargo.toml
 npm run tauri dev
 ```
 
+Ubuntu 26.04 还需要 [发布说明](docs/RELEASE.md) 中列出的 Tauri GTK/WebKit 开发依赖。
+
 ## 构建
 
-生成 Ubuntu 安装包：
+在 Windows 或 macOS 主机上构建对应原生包：
+
+```bash
+npm run tauri -- build
+```
+
+构建 Ubuntu Debian 包：
 
 ```bash
 npm run tauri:ubuntu
 ```
 
-产物位置：
-
-```text
-src-tauri/target/release/bundle/deb/
-```
-
-本仓库刻意只生成 `.deb`。当前 AppImage 打包方式可能与 Ubuntu 26.04 的 Wayland、Mesa、GLib 和 WebKitGTK 运行时产生冲突。
-
-## 隐私与准确性
-
-- 仅在应用配置目录保存悬浮组件偏好。
-- 不保存或记录 Token、账户 ID、提示词、聊天记录、原始接口响应和认证文件路径。
-- 额度服务并非公开稳定 API；登录态或响应格式改变时，组件会显示安全的不可用/过期状态，不会编造数值。
-
-完整说明见 [PRIVACY.md](PRIVACY.md) 与 [SECURITY.md](SECURITY.md)。
+Ubuntu 产物位于 `src-tauri/target/release/bundle/deb/`。Linux 刻意选择 `.deb` 而非 AppImage；这项 Linux 专用选择不会取消 Windows 或 macOS 产物。
 
 ## 发布
 
-GitHub Actions 使用 `ubuntu-26.04` runner 验证和打包。推送 `v*` 标签后，会生成包含一个 `.deb` 与 `SHA256SUMS.txt` 的草稿 Release。
+CI 覆盖共享前端以及 Windows、macOS、Ubuntu 桌面构建。推送匹配版本的 `v*` 标签后，草稿 Release 应包含：
 
-发布前请阅读 [docs/RELEASE.md](docs/RELEASE.md)。
+- 含一个 MSI 和一个 NSIS 的 Windows 压缩包；
+- 含一个通用 App 和一个 DMG 的 macOS 压缩包；
+- 一个 Ubuntu 26.04 `.deb`；
+- `SHA256SUMS.txt`。
+
+Ubuntu 发布门禁会先解包 `.deb`，再扫描实际安装树中的禁用文件、高置信度密钥和本机构建路径。发布前请阅读 [docs/RELEASE.md](docs/RELEASE.md)。
 
 ## 许可证
 

@@ -16,15 +16,24 @@ async function run(command, args) {
   await execFileAsync(command, args, { encoding: "utf8" });
 }
 
-async function findPackage(bundleDirectory) {
+async function findPackage(bundleDirectory, expectedVersion) {
   const entries = await readdir(bundleDirectory, { withFileTypes: true });
   const packages = entries
     .filter((entry) => entry.isFile() && entry.name.endsWith(".deb"))
     .map((entry) => join(bundleDirectory, entry.name));
-  if (packages.length !== 1) {
-    throw new Error(`expected exactly one .deb package in ${bundleDirectory}, found ${packages.length}`);
+  const matching = [];
+  for (const packagePath of packages) {
+    const { stdout } = await execFileAsync("dpkg-deb", ["--field", packagePath, "Version"], {
+      encoding: "utf8",
+    });
+    if (stdout.trim() === expectedVersion) matching.push(packagePath);
   }
-  return packages[0];
+  if (matching.length !== 1) {
+    throw new Error(
+      `expected exactly one version ${expectedVersion} .deb package in ${bundleDirectory}, found ${matching.length}`,
+    );
+  }
+  return matching[0];
 }
 
 function replaceDepends(control) {
@@ -63,6 +72,7 @@ async function normalize(packagePath) {
 }
 
 const bundleDirectory = resolve(process.argv[2] ?? "src-tauri/target/release/bundle/deb");
-const packagePath = await findPackage(bundleDirectory);
+const packageManifest = JSON.parse(await readFile(resolve("package.json"), "utf8"));
+const packagePath = await findPackage(bundleDirectory, packageManifest.version);
 await normalize(packagePath);
 console.log(`Normalized Ubuntu 26.04 dependencies in ${packagePath}`);

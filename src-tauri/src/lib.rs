@@ -38,6 +38,11 @@ pub(crate) struct AppState {
 const TRAY_LANGUAGE_CHANGED_EVENT: &str = "tray-language-changed";
 const TRAY_PANEL_VISIBILITY_CHANGED_EVENT: &str = "tray-panel-visibility-changed";
 
+#[cfg(any(target_os = "linux", test))]
+fn should_skip_taskbar(tray_available: bool) -> bool {
+    tray_available
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct TrayLabels {
     show_panel: &'static str,
@@ -494,7 +499,8 @@ pub fn run() {
                 fetch_lock: tokio::sync::Mutex::new(()),
                 snapshot_cache: Mutex::new(None),
             });
-            if setup_tray(app).is_err() {
+            let tray_available = setup_tray(app).is_ok();
+            if !tray_available {
                 eprintln!("tray setup failed; enabling taskbar fallback");
                 if let Some(window) = app.get_webview_window("widget") {
                     let _ = window.set_skip_taskbar(false);
@@ -507,7 +513,7 @@ pub fn run() {
                     // The Shell extension owns stacking and workspace affinity so
                     // the widget stays with ChatGPT instead of becoming a desktop
                     // overlay when another application is focused.
-                    let _ = window.set_skip_taskbar(true);
+                    let _ = window.set_skip_taskbar(should_skip_taskbar(tray_available));
                     let _ = window.set_visible_on_all_workspaces(false);
                 }
             }
@@ -548,8 +554,14 @@ pub fn run() {
 }
 
 #[cfg(test)]
-mod tray_label_tests {
-    use super::{tray_labels, TrayLabels};
+mod tray_tests {
+    use super::{should_skip_taskbar, tray_labels, TrayLabels};
+
+    #[test]
+    fn keeps_taskbar_entry_when_tray_setup_fails() {
+        assert!(!should_skip_taskbar(false));
+        assert!(should_skip_taskbar(true));
+    }
 
     #[test]
     fn returns_english_tray_labels() {

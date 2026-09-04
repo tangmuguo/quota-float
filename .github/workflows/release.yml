@@ -205,7 +205,7 @@ jobs:
           test "$(grep -Ec '\.app/Contents/MacOS/' <<<"$mac_entries")" -ge "1"
 
           all_archive_entries="$(printf '%s\n%s\n' "$windows_entries" "$mac_entries")"
-          if grep -Eiq '(^|/)(\.env(?:\.[^/]*)?|auth\.json|credentials\.json|token\.json|target|screenshots?|.*\.log)(/|$)' <<<"$all_archive_entries"; then
+          if grep -Eiq '(^|/)(\.env(\.[^/]*)?|auth\.json|credentials\.json|token\.json|target|screenshots?|.*\.log)(/|$)' <<<"$all_archive_entries"; then
             echo "Release archive contains a forbidden path"
             exit 1
           fi

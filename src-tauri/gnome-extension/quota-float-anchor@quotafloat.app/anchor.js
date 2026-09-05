@@ -1,4 +1,7 @@
 export const BOTTOM_RIGHT_MARGIN = 24;
+export const COMPACT_BOTTOM_MARGIN = 160;
+
+const COMPACT_WIDGET_SIZE = 100;
 
 function normalizedIdentities(values) {
     return values
@@ -37,9 +40,22 @@ export function selectHostCandidate(hosts, focused, widget, lastHost) {
 /**
  * Returns a move-only target for a widget frame inside a host frame. The
  * widget's dimensions are deliberately not returned: the Tauri process owns
- * sizing, while GNOME Shell owns only placement.
+ * sizing, while GNOME Shell owns only placement. Frames and the original
+ * margin use stage coordinates; the extra compact lift uses logical pixels
+ * converted with the widget's own geometry scale.
  */
-export function targetFrame(hostFrame, widgetFrame, margin = BOTTOM_RIGHT_MARGIN) {
+export function targetFrame(hostFrame, widgetFrame, margin = BOTTOM_RIGHT_MARGIN, options = {}) {
+    const geometryScale = options.widgetGeometryScale ?? 1;
+    const compact = widgetFrame.width <= COMPACT_WIDGET_SIZE * geometryScale &&
+        widgetFrame.height <= COMPACT_WIDGET_SIZE * geometryScale;
+    const maximized = options.maximizedHorizontally && options.maximizedVertically;
+    // Restored and tiled hosts put composer controls close to the right edge.
+    // Reserve their bottom area without inspecting any application contents.
+    // The expanded panel and fullscreen/fully maximized hosts retain their anchor.
+    const bottomMargin = compact && !options.fullscreen && !maximized
+        ? margin + Math.round((COMPACT_BOTTOM_MARGIN - BOTTOM_RIGHT_MARGIN) * geometryScale)
+        : margin;
+
     return {
         x: Math.max(
             hostFrame.x,
@@ -47,7 +63,7 @@ export function targetFrame(hostFrame, widgetFrame, margin = BOTTOM_RIGHT_MARGIN
         ),
         y: Math.max(
             hostFrame.y,
-            hostFrame.y + hostFrame.height - widgetFrame.height - margin,
+            hostFrame.y + hostFrame.height - widgetFrame.height - bottomMargin,
         ),
     };
 }

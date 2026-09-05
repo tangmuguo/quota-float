@@ -12,7 +12,9 @@ Quota Float is designed to be local-first and minimal.
 
 The Ubuntu `.deb` includes a local GNOME Shell extension because ordinary Wayland clients cannot position one application window relative to another.
 
-While Quota Float is running, the extension checks GNOME's normal top-level window list every 250 ms. It reads application identity, focus/minimized/workspace state, and frame geometry so it can identify the Quota Float and ChatGPT windows. Finding those windows necessarily examines this limited metadata for other top-level windows; it does not read any window contents, titles, keyboard input, prompts, chats, or files, and it makes no network requests.
+While Quota Float is running, the extension checks GNOME's normal top-level window list every 250 ms. It reads application identity, focus/minimized/workspace state, fullscreen/maximized state, and frame geometry so it can identify the Quota Float and ChatGPT windows and reserve space for the compact orb when needed. Finding those windows necessarily examines this limited metadata for other top-level windows; it does not read any window contents, titles, keyboard input, prompts, chats, or files, and it makes no network requests.
+
+For a 100 × 100 compact orb, the extension uses that metadata to keep a 24 px right margin in GNOME desktop coordinates and move up 136 logical px from the default 24 px bottom anchor when the ChatGPT host is neither fullscreen nor fully maximized. With an effective geometry scale of 1, this produces a 160 px bottom margin; other scale and coordinate modes convert the offset from the widget's own geometry so the 136 logical px move is preserved. Fullscreen or fully maximized hosts use the default 24 px desktop-coordinate bottom margin; the 320 × 320 full panel always uses the default 24 px margins. This local coordinate conversion does not add private data or network activity. The extension does not inspect the host's input controls or perform pixel recognition. If the host is too short for the reserved area, the orb is clamped to the host's top edge.
 
 The extension moves, raises, minimizes/restores, and changes the workspace of the Quota Float window only. It never moves, minimizes, raises, or changes the workspace of ChatGPT or another application.
 
@@ -38,6 +40,7 @@ Quota Float stores only widget preferences in its own application config directo
 - panel visibility and expanded/collapsed state;
 - always-on-top preference;
 - pinned provider and auto-rotate interval;
+- selected quota window (5-hour or weekly);
 - interface language.
 
 Older preference files may contain the retired `locked` field. Current versions ignore it and omit it the next time preferences are saved.

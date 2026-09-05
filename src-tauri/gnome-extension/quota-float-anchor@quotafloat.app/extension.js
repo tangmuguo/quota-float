@@ -3,6 +3,7 @@ import Meta from 'gi://Meta';
 
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import {
+    BOTTOM_RIGHT_MARGIN,
     isChatGptIdentity,
     isQuotaFloatIdentity,
     needsMove,
@@ -108,7 +109,18 @@ export default class QuotaFloatChatGptAnchor extends Extension {
         if (widgetRect.width <= 0 || widgetRect.height <= 0)
             return;
 
-        const target = targetFrame(hostRect, widgetRect);
+        // A monitor's display scale is not necessarily its geometry scale:
+        // fractional scaling can already be handled by the compositor stage.
+        const logicalWidgetRect = widget.stage_to_protocol_rect(widgetRect);
+        if (logicalWidgetRect.width <= 0 || logicalWidgetRect.height <= 0)
+            return;
+
+        const target = targetFrame(hostRect, widgetRect, BOTTOM_RIGHT_MARGIN, {
+            fullscreen: host.fullscreen,
+            maximizedHorizontally: host.maximized_horizontally,
+            maximizedVertically: host.maximized_vertically,
+            widgetGeometryScale: widgetRect.width / logicalWidgetRect.width,
+        });
         if (needsMove(widgetRect, target))
             widget.move_frame(false, target.x, target.y);
         widget.raise();

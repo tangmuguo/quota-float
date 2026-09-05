@@ -13,6 +13,8 @@
 | Windows | MSI/NSIS | 两种安装包均生成 | Windows CI |
 | macOS | universal app/DMG | Apple Silicon/Intel 通用产物生成 | macOS CI |
 | Ubuntu GNOME | 多个不同大小 ChatGPT 窗口 | 跟随当前聚焦窗口，而非最大窗口 | 纯逻辑测试；待实机 |
+| Ubuntu GNOME | ChatGPT 移动、调整大小、状态及工作区变化 | 位置/尺寸/状态事件在下一次 GNOME 重绘前合并；250 毫秒轮询仅作发现/恢复兜底 | Node VM 逻辑测试；待实机 |
+| Ubuntu GNOME | 宿主切换、组件销毁、扩展禁用 | 清理旧宿主/组件订阅和待执行帧回调，不影响新的宿主 | Node VM 逻辑测试；待实机 |
 | Ubuntu GNOME | 多个身份字段含 `codex` | 正确识别 ChatGPT 与 Quota Float 身份 | Vitest |
 | Ubuntu 面板 | 320/100 切换和手动拖边 | 只允许两档尺寸，偏好与 React 模式一致 | Rust 配置测试；待实机 |
 | Ubuntu 紧凑定位 | 100 × 100、宿主非全屏且非完全最大化 | GNOME 桌面坐标右侧 24 px，从默认底边锚点上移 136 个逻辑 px；有效几何缩放为 1 时底边 160 px，为底部输入区和发送/语音按钮留出空间 | 纯逻辑测试；待实机 |

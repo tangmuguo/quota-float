@@ -1,7 +1,7 @@
 {
   "name": "quota-float",
   "private": true,
-  "version": "0.1.12",
+  "version": "0.1.12-1",
   "type": "module",
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
@@ -9,7 +9,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "test": "vitest run",
+    "test": "vitest run && npm run test:gnome-extension",
+    "test:gnome-extension": "node --experimental-vm-modules --test scripts/gnome-extension.test.mjs",
     "tauri": "tauri",
     "tauri:ubuntu": "tauri build --bundles deb -- --locked && node scripts/normalize-ubuntu-deb.mjs && node scripts/verify-ubuntu-deb.mjs"
   },

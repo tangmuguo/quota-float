@@ -29,7 +29,7 @@ Ubuntu 是新增的平台路径；共享的 React 界面、额度读取、偏好
 下载 Ubuntu 26.04 的 `.deb`，使用 `apt` 安装以自动解析运行时依赖：
 
 ```bash
-sudo apt install "./Quota Float Ubuntu_0.1.12_amd64.deb"
+sudo apt install "./Quota Float Ubuntu_0.1.12-1_amd64.deb"
 ```
 
 正式支持的 Linux 桌面会话是 Ubuntu 26.04、GNOME Shell 48–50 与 Wayland。请先在同一台电脑登录 Codex。首次安装或更新扩展后，请注销并重新登录一次，让 GNOME Shell 扫描扩展。在受支持的 GNOME 会话中，Quota Float 会在启动时尽力启用扩展，并在正常退出时尝试禁用；若系统策略、崩溃或强制结束导致清理未执行，可手动控制：
@@ -51,7 +51,7 @@ Debian 包依赖 `libwebkit2gtk-4.1-0`、`libgtk-3-0t64`、`libayatana-appindica
 
 Wayland 不允许普通应用强制设置跨应用坐标，因此 Quota Float 只把定位交给本地 GNOME Shell 扩展。扩展优先选择当前聚焦的 ChatGPT 窗口，用户操作组件时继续沿用刚才的宿主窗口。320 × 320 完整面板始终在 GNOME 桌面坐标中距宿主右下角 24 px。对于 100 × 100 紧凑额度圆球，当宿主既未全屏也未完全最大化时，右侧保持 24 个桌面坐标 px，并从默认的 24 px 底边锚点向上移动 136 个逻辑 px，为宿主底部输入区和发送/语音按钮留出空间；在有效几何缩放为 1 的常规逻辑桌面上，这对应底边 160 px，其他缩放和坐标模式会根据组件自身的有效几何缩放换算，保持 136 个逻辑 px 的上移距离。宿主重新全屏或完全最大化后，紧凑圆球恢复默认的 24 px 桌面坐标底边距。半屏平铺和单轴最大化的宿主继续使用紧凑模式的避让位置；宿主过矮时会将圆球钳制到宿主顶部。
 
-定位只根据宿主窗口的边框几何以及全屏/最大化状态计算，不读取窗口内容，也不进行像素识别。
+定位和更新只根据宿主窗口的边框几何以及全屏/最大化状态计算。宿主移动或调整大小时，扩展监听位置、尺寸和状态变化，并将更新合并到下一次 GNOME 重绘；250 毫秒发现/恢复检查仍作为兜底。扩展只跟随当前宿主与组件，宿主切换、组件销毁或扩展禁用时会清理订阅和待执行的帧回调。不读取窗口内容，也不进行像素识别。
 
 Linux 窗口在技术上保持可调整，以便 GTK 接受程序化模式切换；但原生最小/最大尺寸会固定为当前的 320 × 320 或 100 × 100，只允许这两档，不允许手动调整到中间尺寸。
 
@@ -99,7 +99,7 @@ export RUSTFLAGS="--remap-path-prefix=$PWD=/src --remap-path-prefix=$HOME=/build
 npm run tauri:ubuntu
 ```
 
-该命令会使用已提交的 Cargo 锁文件构建、规范化运行时依赖字段，并解包校验安装内容。产物 `Quota Float Ubuntu_<版本>_amd64.deb` 位于 `src-tauri/target/release/bundle/deb/`，与已有的 0.1.9、0.1.10 和 0.1.11 Debian 测试包并存；旧包保持不变。路径重映射用于确认安装包没有嵌入本机构建路径。Linux 刻意选择 `.deb` 而非 AppImage；这项 Linux 专用选择不会取消 Windows 或 macOS 产物。
+该命令会使用已提交的 Cargo 锁文件构建、规范化运行时依赖字段，并解包校验安装内容。产物 `Quota Float Ubuntu_<版本>_amd64.deb` 位于 `src-tauri/target/release/bundle/deb/`，与已有的 0.1.9、0.1.10、0.1.11 和 0.1.12 Debian 测试包并存；旧包保持不变。路径重映射用于确认安装包没有嵌入本机构建路径。Linux 刻意选择 `.deb` 而非 AppImage；这项 Linux 专用选择不会取消 Windows 或 macOS 产物。
 
 ## 发布
 

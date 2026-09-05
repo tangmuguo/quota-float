@@ -13,7 +13,7 @@ GitHub Actions 必须允许以下三类桌面 job 运行：
 ## 版本与标签
 
 - [ ] `package.json`、`package-lock.json`、`Cargo.toml`、`Cargo.lock`、`tauri.conf.json` 和发布模板版本一致，双语 README 与发布指南引用当前 `.deb` 文件名。
-- [ ] 标签尚未存在，且与版本完全匹配；当前示例为 `v0.1.12`。
+- [ ] 标签尚未存在，且与版本完全匹配；当前示例为 `v0.1.12-1`。
 - [ ] `node scripts/verify-release-version.mjs` 通过。
 
 ## 自动门禁与本地质量检查
@@ -30,7 +30,7 @@ GitHub Actions 必须允许以下三类桌面 job 运行：
 
 - [ ] Windows：ChatGPT/Codex 宿主跟随、显示/隐藏、MSI/NSIS 安装。
 - [ ] macOS：universal app、DMG、托盘与显示/隐藏。
-- [ ] Ubuntu：`apt install`、GNOME 扩展启停/卸载、Wayland 多窗口锚定、两档尺寸、紧凑圆球在普通/全屏/完全最大化/半屏平铺/单轴最大化/过矮宿主下从默认 24 px 桌面坐标锚点上移 136 逻辑 px 的位置规则、托盘关闭恢复、手动刷新。
+- [ ] Ubuntu：`apt install`、GNOME 扩展启停/卸载、Wayland 多窗口锚定、两档尺寸、紧凑圆球在普通/全屏/完全最大化/半屏平铺/单轴最大化/过矮宿主下的位置规则、拖动/调整大小时平滑跟随、托盘关闭恢复、手动刷新。
 - [ ] Ubuntu：fractional scale、跨显示器移动及显示器/工作区变化后的窗口几何换算保持紧凑圆球上移距离（待实机）。
 - [ ] 顶部栏托盘 5 小时/一周切换、双视图、语言切换、重启保存与旧配置默认一周。
 - [ ] 偏好升级：旧 `locked: true` 被忽略，窗口可交互，托盘不再包含“解锁悬浮窗”。
@@ -43,6 +43,6 @@ GitHub Actions 必须允许以下三类桌面 job 运行：
 - `Quota Float Ubuntu_<version>_amd64.deb`
 - `SHA256SUMS.txt`
 
-0.1.9、0.1.10 和 0.1.11 旧版 Debian 测试包应继续保留，且原有校验和不变。
+0.1.9、0.1.10、0.1.11 和 0.1.12 旧版 Debian 测试包应继续保留，且原有校验和不变。
 
 草稿附件、哈希、隐私扫描和实机结果全部确认后再点击 Publish release。

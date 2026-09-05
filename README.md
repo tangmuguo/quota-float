@@ -29,7 +29,7 @@ Ubuntu support is an additional platform path. Shared React, quota, preference, 
 Download the Ubuntu 26.04 `.deb`, then install it with `apt` so runtime dependencies are resolved:
 
 ```bash
-sudo apt install "./Quota Float Ubuntu_0.1.12_amd64.deb"
+sudo apt install "./Quota Float Ubuntu_0.1.12-1_amd64.deb"
 ```
 
 The supported Linux desktop session is Ubuntu 26.04 with GNOME Shell 48–50 on Wayland. Sign in to Codex on the same machine first. After the initial extension install or update, log out and back in once so GNOME Shell can scan it. In a supported GNOME session, Quota Float makes a best-effort attempt to enable the extension at startup and disable it on a normal exit. If system policy, a crash, or forced termination prevents cleanup, control it manually:
@@ -51,7 +51,7 @@ The Debian package depends on `libwebkit2gtk-4.1-0`, `libgtk-3-0t64`, `libayatan
 
 Wayland prevents an ordinary app from forcing an arbitrary cross-application coordinate. Quota Float therefore delegates placement to a small local GNOME Shell extension. The extension selects the focused ChatGPT window and preserves that host while the user interacts with the widget. The 320 × 320 full panel stays 24 px from the host's lower-right corner in GNOME desktop coordinates. For the 100 × 100 compact orb, a host that is neither fullscreen nor fully maximized keeps the 24 px right desktop-coordinate margin and moves the orb upward by 136 logical px from the default 24 px bottom anchor. On a conventional logical desktop with an effective geometry scale of 1, that is a 160 px bottom margin; other scale and coordinate modes convert the offset using the widget's own effective geometry scale so the upward logical distance remains 136 px. Fullscreen or fully maximized hosts restore the compact orb to the default 24 px desktop-coordinate bottom margin; half-screen/tiled and single-axis-maximized hosts keep the compact avoidance. A very short host clamps the orb to the host's top edge.
 
-Placement uses the host window's frame geometry and fullscreen/maximized state. It does not read window contents or perform pixel recognition.
+Placement and updates use the host window's frame geometry and fullscreen/maximized state. While the host moves or resizes, the extension listens for position, size, and state changes and coalesces updates into the next GNOME redraw. A 250 ms discovery/recovery check remains as a fallback; only the current host and widget are followed, and subscriptions plus pending frame work are cleaned up when either changes or the extension is disabled. It does not read window contents or perform pixel recognition.
 
 The Linux window remains technically resizable so GTK accepts programmatic mode changes, but its native minimum and maximum are pinned to the selected 320 × 320 or 100 × 100 mode. Intermediate manual sizes are not allowed.
 
@@ -99,7 +99,7 @@ export RUSTFLAGS="--remap-path-prefix=$PWD=/src --remap-path-prefix=$HOME=/build
 npm run tauri:ubuntu
 ```
 
-The command builds with the committed Cargo lockfile, normalizes the runtime dependency field, then extracts and verifies the package contents. The resulting `Quota Float Ubuntu_<version>_amd64.deb` is written under `src-tauri/target/release/bundle/deb/`, alongside the existing 0.1.9, 0.1.10, and 0.1.11 Debian test packages, which are retained unchanged. The path remapping allows the package verifier to confirm that local build paths were not embedded. Linux intentionally targets `.deb` instead of AppImage; that Linux-specific choice does not remove Windows or macOS bundles.
+The command builds with the committed Cargo lockfile, normalizes the runtime dependency field, then extracts and verifies the package contents. The resulting `Quota Float Ubuntu_<version>_amd64.deb` is written under `src-tauri/target/release/bundle/deb/`, alongside the existing 0.1.9, 0.1.10, 0.1.11, and 0.1.12 Debian test packages, which are retained unchanged. The path remapping allows the package verifier to confirm that local build paths were not embedded. Linux intentionally targets `.deb` instead of AppImage; that Linux-specific choice does not remove Windows or macOS bundles.
 
 ## Release
 

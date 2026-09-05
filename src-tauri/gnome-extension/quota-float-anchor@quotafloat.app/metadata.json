@@ -1,6 +1,6 @@
 {
   "uuid": "quota-float-anchor@quotafloat.app",
   "name": "Quota Float ChatGPT Anchor",
-  "description": "Anchors Quota Float to the active ChatGPT window and lifts the compact widget above input controls in restored or tiled windows.",
+  "description": "Follows the active ChatGPT window before each redraw and lifts the compact widget above input controls in restored or tiled windows.",
   "shell-version": ["48", "49", "50"]
 }

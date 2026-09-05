@@ -13,7 +13,7 @@ GitHub Actions 必须允许以下三类桌面 job 运行：
 ## 版本与标签
 
 - [ ] `package.json`、`package-lock.json`、`Cargo.toml`、`Cargo.lock`、`tauri.conf.json` 和发布模板版本一致，双语 README 与发布指南引用当前 `.deb` 文件名。
-- [ ] 标签尚未存在，且与版本完全匹配；当前示例为 `v0.1.10`。
+- [ ] 标签尚未存在，且与版本完全匹配；当前示例为 `v0.1.11`。
 - [ ] `node scripts/verify-release-version.mjs` 通过。
 
 ## 自动门禁与本地质量检查
@@ -31,6 +31,7 @@ GitHub Actions 必须允许以下三类桌面 job 运行：
 - [ ] Windows：ChatGPT/Codex 宿主跟随、显示/隐藏、MSI/NSIS 安装。
 - [ ] macOS：universal app、DMG、托盘与显示/隐藏。
 - [ ] Ubuntu：`apt install`、GNOME 扩展启停/卸载、Wayland 多窗口锚定、两档尺寸、托盘关闭恢复、手动刷新。
+- [ ] 顶部栏托盘 5 小时/一周切换、双视图、语言切换、重启保存与旧配置默认一周。
 - [ ] 偏好升级：旧 `locked: true` 被忽略，窗口可交互，托盘不再包含“解锁悬浮窗”。
 - [ ] 三个平台都验证除已退役 `locked` 字段外的现有设置在升级后保持不变。
 

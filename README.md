@@ -16,11 +16,12 @@ Ubuntu support is an additional platform path. Shared React, quota, preference, 
 
 ## What it shows
 
-- Codex plan, weekly remaining quota, next reset time, and reset-credit information when the service provides it.
+- Codex plan, 5-hour or weekly remaining quota, the selected window's next reset time, and reset-credit information when the service provides it.
 - Healthy, caution, critical, stale, signed-out, and unavailable states.
 - A 320 × 320 full panel and a 100 × 100 compact quota orb.
-- Persistent preferences for panel visibility, expanded/compact mode, and interface language.
-- Tray controls for show/hide, refresh, language, start at login, and quit.
+- Persistent preferences for panel visibility, expanded/compact mode, quota window, and interface language.
+- The top-bar tray menu offers **5-hour quota** and **Weekly quota** with a check mark for the current choice. The full panel and compact orb switch together, and the choice survives restarts. Existing settings default to weekly quota.
+- Tray controls also include show/hide, refresh, language, start at login, and quit.
 - Manual refresh from error states and the tray, so recovery is not blocked by automatic retry backoff.
 
 ## Ubuntu installation
@@ -28,7 +29,7 @@ Ubuntu support is an additional platform path. Shared React, quota, preference, 
 Download the Ubuntu 26.04 `.deb`, then install it with `apt` so runtime dependencies are resolved:
 
 ```bash
-sudo apt install "./Quota Float Ubuntu_0.1.10_amd64.deb"
+sudo apt install "./Quota Float Ubuntu_0.1.11_amd64.deb"
 ```
 
 The supported Linux desktop session is Ubuntu 26.04 with GNOME Shell 48–50 on Wayland. Sign in to Codex on the same machine first. After the initial extension install or update, log out and back in once so GNOME Shell can scan it. In a supported GNOME session, Quota Float makes a best-effort attempt to enable the extension at startup and disable it on a normal exit. If system policy, a crash, or forced termination prevents cleanup, control it manually:
@@ -62,6 +63,8 @@ Quota Float reads one existing local login file:
 - otherwise `~/.codex/auth.json`.
 
 It uses that existing session only to call the Codex/ChatGPT quota endpoints. It does not estimate quota from token counts, redeem reset credits, change account settings, or save credentials. Browser preview uses mock data; real quota reads require the Tauri desktop app and a local Codex login.
+
+The 5-hour and weekly allowances are matched by their window durations. If the service omits the selected window, the widget reports that window as unavailable instead of substituting the other percentage.
 
 ## Development
 

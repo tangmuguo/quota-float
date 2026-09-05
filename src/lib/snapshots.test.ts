@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { ProviderSnapshot } from "../types";
-import { mergeSnapshots } from "./snapshots";
+import { mergeSnapshots, selectedUsageWindow } from "./snapshots";
 
 const success: ProviderSnapshot = {
   provider: "codex",
   displayName: "CODEX",
   plan: "PRO",
   weeklyWindow: { remainingPercent: 42, resetsAt: "2026-07-10T00:00:00Z", windowSeconds: 604_800 },
+  fiveHourWindow: { remainingPercent: 78, resetsAt: "2026-07-07T05:00:00Z", windowSeconds: 18_000 },
   resetCredits: 1,
   updatedAt: "2026-07-07T00:00:00Z",
   status: "ok",
@@ -17,6 +18,21 @@ describe("snapshot failure handling", () => {
   it("retains the last successful values during a transient failure", () => {
     const failure: ProviderSnapshot = { ...success, weeklyWindow: null, status: "unavailable", message: "Network unavailable", updatedAt: "2026-07-07T01:00:00Z" };
     expect(mergeSnapshots([success], [failure])[0]).toEqual({ ...success, status: "stale", message: "Network unavailable" });
+  });
+
+  it("retains both cached windows during a transient failure", () => {
+    const failure: ProviderSnapshot = { ...success, weeklyWindow: null, fiveHourWindow: null, status: "unavailable", message: "Network unavailable", updatedAt: "2026-07-07T01:00:00Z" };
+    const merged = mergeSnapshots([success], [failure])[0];
+    expect(merged.weeklyWindow?.remainingPercent).toBe(42);
+    expect(merged.fiveHourWindow?.remainingPercent).toBe(78);
+  });
+
+  it("keeps an available five-hour response from falling back to the weekly window", () => {
+    const fiveHourOnly: ProviderSnapshot = { ...success, weeklyWindow: null };
+    const merged = mergeSnapshots([success], [fiveHourOnly])[0];
+    expect(merged.weeklyWindow).toBeNull();
+    expect(selectedUsageWindow(merged, "weekly")).toBeNull();
+    expect(selectedUsageWindow(merged, "fiveHour")?.remainingPercent).toBe(78);
   });
 
   it("shows a failure when no successful snapshot exists", () => {

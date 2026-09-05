@@ -14,6 +14,11 @@ const baseSnapshot: ProviderSnapshot = {
     resetsAt: "2026-07-21T00:00:00Z",
     windowSeconds: 604_800,
   },
+  fiveHourWindow: {
+    remainingPercent: 75,
+    resetsAt: "2026-07-14T05:00:00Z",
+    windowSeconds: 18_000,
+  },
   resetCredits: 0,
   updatedAt: "2026-07-14T00:00:00Z",
   status: "ok",
@@ -27,13 +32,15 @@ const preferences: WidgetPreferences = {
   pinnedProvider: null,
   autoRotateSeconds: 12,
   language: "zh-CN",
+  quotaWindow: "weekly",
 };
 
-function renderOrb(snapshot: ProviderSnapshot) {
+function renderOrb(snapshot: ProviderSnapshot, quotaWindow: WidgetPreferences["quotaWindow"] = "weekly") {
   return render(
     <QuotaOrb
       snapshot={snapshot}
       language="zh-CN"
+      quotaWindow={quotaWindow}
       onHover={() => undefined}
       onToggleExpanded={() => undefined}
     />,
@@ -53,6 +60,13 @@ describe("compact quota view", () => {
     });
     expect(screen.getByText(String(remainingPercent))).toBeTruthy();
     expect(screen.getByRole("button", { name: "展开额度面板" })).toBeTruthy();
+  });
+
+  it("uses the selected five-hour window in the orb and exposes its short label", () => {
+    renderOrb(baseSnapshot, "fiveHour");
+    expect(screen.getByText("75")).toBeTruthy();
+    expect(screen.getByText("5h")).toBeTruthy();
+    expect(screen.getByRole("main", { name: "5 小时额度剩余 75%" })).toBeTruthy();
   });
 
   it("keeps a fresh stale percentage consistent with the expanded panel", () => {
@@ -114,5 +128,57 @@ describe("manual recovery", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "刷新额度数据" }));
     expect(onRefresh).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("selected quota window", () => {
+  it("uses the five-hour reset source and its color tier", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-14T00:00:00Z"));
+    const fiveHourCritical = {
+      ...baseSnapshot,
+      fiveHourWindow: { ...baseSnapshot.fiveHourWindow!, remainingPercent: 8, resetsAt: "2026-07-14T05:00:00Z" },
+    };
+    const { container } = render(
+      <QuotaCard
+        snapshot={fiveHourCritical}
+        preferences={{ ...preferences, language: "en", quotaWindow: "fiveHour" }}
+        providerCount={1}
+        onPrevious={() => undefined}
+        onNext={() => undefined}
+        onTogglePin={() => undefined}
+        onLanguage={() => undefined}
+        onHover={() => undefined}
+        onToggleExpanded={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText("8")).toBeTruthy();
+    expect(screen.getByText("resets in 5h")).toBeTruthy();
+    expect(screen.getByText("5-hour remaining · until 7/14 13:00")).toBeTruthy();
+    expect(container.querySelector(".quota-card--critical")).toBeTruthy();
+  });
+
+  it("does not substitute the weekly window when the selected five-hour window is missing", () => {
+    render(
+      <QuotaCard
+        snapshot={{ ...baseSnapshot, fiveHourWindow: null }}
+        preferences={{ ...preferences, language: "en", quotaWindow: "fiveHour" }}
+        providerCount={1}
+        onPrevious={() => undefined}
+        onNext={() => undefined}
+        onTogglePin={() => undefined}
+        onLanguage={() => undefined}
+        onHover={() => undefined}
+        onRefresh={() => undefined}
+        onToggleExpanded={() => undefined}
+        isConsuming
+      />,
+    );
+
+    expect(screen.getAllByText("5-hour quota window is unavailable. Try refreshing shortly.").length).toBeGreaterThan(0);
+    expect(screen.queryByText("50")).toBeNull();
+    expect(screen.queryByText("75")).toBeNull();
+    expect(screen.queryByLabelText("Quota in use")).toBeNull();
   });
 });

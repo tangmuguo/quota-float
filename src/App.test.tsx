@@ -23,6 +23,7 @@ const preferences: WidgetPreferences = {
   pinnedProvider: null,
   autoRotateSeconds: 12,
   language: "en",
+  quotaWindow: "weekly",
 };
 
 const snapshot: ProviderSnapshot = {
@@ -33,6 +34,11 @@ const snapshot: ProviderSnapshot = {
     remainingPercent: 50,
     resetsAt: "2026-07-21T00:00:00Z",
     windowSeconds: 604_800,
+  },
+  fiveHourWindow: {
+    remainingPercent: 75,
+    resetsAt: "2026-07-14T05:00:00Z",
+    windowSeconds: 18_000,
   },
   resetCredits: 0,
   updatedAt: "2026-07-14T00:00:00Z",
@@ -52,6 +58,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.useRealTimers();
 });
 
 describe("panel mode transaction", () => {
@@ -124,5 +131,34 @@ describe("panel mode transaction", () => {
     expect(await screen.findByRole("button", { name: "Expand quota panel" })).toBeTruthy();
     fireEvent.click(collapse);
     await waitFor(() => expect(bridge.setWidgetExpanded).toHaveBeenCalledWith(false));
+  });
+});
+
+describe("quota window preference events", () => {
+  it("updates the displayed window immediately when the native preference event arrives", async () => {
+    let onPreferences: ((value: WidgetPreferences) => void) | undefined;
+    bridge.listenDesktopEvents.mockImplementation(async (handlers: { onPreferences: (value: WidgetPreferences) => void }) => {
+      onPreferences = handlers.onPreferences;
+      return () => undefined;
+    });
+    render(<App />);
+
+    expect(await screen.findByText("Weekly remaining")).toBeTruthy();
+    act(() => onPreferences?.({ ...preferences, quotaWindow: "fiveHour" }));
+
+    expect(await screen.findByText("5-hour remaining")).toBeTruthy();
+    expect(screen.getAllByText("75").length).toBeGreaterThan(0);
+    expect(screen.getByRole("progressbar", { name: "5-hour quota remaining 75%" })).toBeTruthy();
+  });
+
+  it("defaults legacy preferences without a quota window to weekly", async () => {
+    const legacy = { ...preferences } as Partial<WidgetPreferences>;
+    delete legacy.quotaWindow;
+    bridge.getPreferences.mockResolvedValue(legacy);
+    render(<App />);
+
+    expect(await screen.findByText("Weekly remaining")).toBeTruthy();
+    expect(screen.getAllByText("50").length).toBeGreaterThan(0);
+    expect(screen.queryByText("5-hour remaining")).toBeNull();
   });
 });

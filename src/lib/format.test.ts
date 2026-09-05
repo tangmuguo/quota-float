@@ -31,15 +31,22 @@ describe("quota formatting", () => {
 
   it("accelerates only near a future reset", () => {
     const now = new Date("2026-07-07T00:00:00Z");
-    const snapshot = { provider: "codex", displayName: "CODEX", plan: "PRO", weeklyWindow: null, resetCredits: 0, updatedAt: now.toISOString(), status: "ok", message: null } as const;
+    const snapshot = { provider: "codex", displayName: "CODEX", plan: "PRO", weeklyWindow: null, fiveHourWindow: null, resetCredits: 0, updatedAt: now.toISOString(), status: "ok", message: null } as const;
     expect(needsFastRefresh({ ...snapshot, weeklyWindow: { remainingPercent: 1, resetsAt: "2026-07-07T00:10:00Z", windowSeconds: 604800 } }, now)).toBe(true);
     expect(needsFastRefresh({ ...snapshot, weeklyWindow: { remainingPercent: 1, resetsAt: "2026-07-07T01:00:00Z", windowSeconds: 604800 } }, now)).toBe(false);
     expect(needsFastRefresh({ ...snapshot, weeklyWindow: { remainingPercent: 1, resetsAt: "2026-07-06T23:58:00Z", windowSeconds: 604800 } }, now)).toBe(true);
   });
 
-  it("formats the weekly reset as a compact date", () => {
-    expect(formatResetDate("2026-07-10T00:00:00+08:00")).toBe("7/10");
-    expect(formatResetDate("2026-07-10T00:00:00+08:00", "en")).toBe("7/10");
+  it("also accelerates polling for a near five-hour reset", () => {
+    const now = new Date("2026-07-07T00:00:00Z");
+    const snapshot = { provider: "codex", displayName: "CODEX", plan: "PRO", weeklyWindow: null, fiveHourWindow: null, resetCredits: 0, updatedAt: now.toISOString(), status: "ok", message: null } as const;
+    expect(needsFastRefresh({ ...snapshot, fiveHourWindow: { remainingPercent: 22, resetsAt: "2026-07-07T00:12:00Z", windowSeconds: 18_000 } }, now)).toBe(true);
+    expect(needsFastRefresh({ ...snapshot, fiveHourWindow: { remainingPercent: 22, resetsAt: "2026-07-07T01:00:00Z", windowSeconds: 18_000 } }, now)).toBe(false);
+  });
+
+  it("formats the reset as a compact local date and time", () => {
+    expect(formatResetDate("2026-07-10T18:42:00+08:00")).toBe("7/10 18:42");
+    expect(formatResetDate("2026-07-10T18:42:00+08:00", "en")).toBe("7/10 18:42");
     expect(formatResetDate(null)).toBe("日期未知");
     expect(formatResetDate(null, "zh-CN")).toBe("日期未知");
     expect(formatResetDate(null, "en")).toBe("Date unknown");

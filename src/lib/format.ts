@@ -29,22 +29,33 @@ export function formatResetTime(value: string | null, now = new Date(), language
 }
 
 export function needsFastRefresh(snapshot: ProviderSnapshot, now = new Date()): boolean {
-  const reset = snapshot.weeklyWindow?.resetsAt;
-  if (!reset) return false;
-  const remaining = new Date(reset).getTime() - now.getTime();
-  return remaining > -5 * 60_000 && remaining <= 15 * 60_000;
+  return [snapshot.weeklyWindow, snapshot.fiveHourWindow].some((window) => {
+    const reset = window?.resetsAt;
+    if (!reset) return false;
+    const remaining = new Date(reset).getTime() - now.getTime();
+    return remaining > -5 * 60_000 && remaining <= 15 * 60_000;
+  });
 }
 
 export function formatResetDate(value: string | null, language: Language = "zh-CN"): string {
   const t = copy[normalizeLanguage(language)];
   if (!value) return t.dateUnknown;
-  const isoDate = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
-  if (isoDate) {
-    return `${Number(isoDate[2])}/${Number(isoDate[3])}`;
-  }
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return t.dateUnknown;
-  return new Intl.DateTimeFormat(language === "en" ? "en-US" : "zh-CN", { month: "numeric", day: "numeric" }).format(date);
+  const parts = new Intl.DateTimeFormat(language === "en" ? "en-US" : "zh-CN", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const getPart = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value;
+  const month = getPart("month");
+  const day = getPart("day");
+  const hour = getPart("hour");
+  const minute = getPart("minute");
+  if (!month || !day || !hour || !minute) return t.dateUnknown;
+  return `${Number(month)}/${Number(day)} ${hour}:${minute}`;
 }
 
 export function formatDateTime(value: string, language: Language): string {

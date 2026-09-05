@@ -1,12 +1,13 @@
 import type { ProviderSnapshot, WidgetPreferences } from "../types";
 
-const defaultPreferences: WidgetPreferences = { panelVisible: true, expanded: true, alwaysOnTop: true, pinnedProvider: null, autoRotateSeconds: 12, language: "zh-CN" };
+const defaultPreferences: WidgetPreferences = { panelVisible: true, expanded: true, alwaysOnTop: true, pinnedProvider: null, autoRotateSeconds: 12, language: "zh-CN", quotaWindow: "weekly" };
 
 const mockSnapshot: ProviderSnapshot = {
   provider: "codex",
   displayName: "CODEX",
   plan: "PRO",
   weeklyWindow: { remainingPercent: 42, resetsAt: new Date(Date.now() + 3.2 * 86_400_000).toISOString(), windowSeconds: 604_800 },
+  fiveHourWindow: { remainingPercent: 76, resetsAt: new Date(Date.now() + 3.5 * 3_600_000).toISOString(), windowSeconds: 18_000 },
   resetCredits: 1,
   resetCreditExpiresAt: [new Date(Date.now() + 9 * 86_400_000).toISOString()],
   updatedAt: new Date().toISOString(),

@@ -1,5 +1,5 @@
 import { useMemo, useState, type CSSProperties } from "react";
-import type { ProviderSnapshot, WidgetPreferences } from "../types";
+import type { Language, ProviderSnapshot, QuotaWindow, WidgetPreferences } from "../types";
 import { QuotaCard, QuotaOrb } from "./QuotaCard";
 
 const preview: ProviderSnapshot = {
@@ -7,13 +7,14 @@ const preview: ProviderSnapshot = {
   displayName: "CODEX",
   plan: "PRO",
   weeklyWindow: { remainingPercent: 42, resetsAt: new Date(Date.now() + 3.2 * 86_400_000).toISOString(), windowSeconds: 604_800 },
+  fiveHourWindow: { remainingPercent: 76, resetsAt: new Date(Date.now() + 2.4 * 3_600_000).toISOString(), windowSeconds: 18_000 },
   resetCredits: 1,
   resetCreditExpiresAt: [new Date(Date.now() + 9 * 86_400_000).toISOString()],
   updatedAt: new Date().toISOString(),
   status: "ok",
   message: null,
 };
-const preferences: WidgetPreferences = { panelVisible: true, expanded: true, alwaysOnTop: true, pinnedProvider: "codex", autoRotateSeconds: 12, language: "en" };
+const preferences: WidgetPreferences = { panelVisible: true, expanded: true, alwaysOnTop: true, pinnedProvider: "codex", autoRotateSeconds: 12, language: "en", quotaWindow: "weekly" };
 
 interface Values {
   radius: number;
@@ -26,7 +27,7 @@ interface Values {
   warm: string;
 }
 
-type PreviewMode = 74 | 35 | 8 | "unavailable" | "stale" | "signed_out" | "orb";
+type PreviewMode = 74 | 35 | 8 | "unavailable" | "stale" | "signed_out" | "missing_window" | "orb";
 
 const previewModes: Array<{ value: PreviewMode; label: string }> = [
   { value: 74, label: "74% Healthy" },
@@ -35,6 +36,7 @@ const previewModes: Array<{ value: PreviewMode; label: string }> = [
   { value: "unavailable", label: "Unavailable" },
   { value: "stale", label: "Stale" },
   { value: "signed_out", label: "Signed out" },
+  { value: "missing_window", label: "Missing selected window" },
   { value: "orb", label: "Orb" },
 ];
 
@@ -45,17 +47,27 @@ function initialPreviewMode(): PreviewMode {
   if (mode === "healthy") return 74;
   if (mode === "caution") return 35;
   if (mode === "critical") return 8;
-  if (mode === "unavailable" || mode === "stale" || mode === "signed_out" || mode === "orb") return mode;
+  if (mode === "unavailable" || mode === "stale" || mode === "signed_out" || mode === "missing_window" || mode === "orb") return mode;
   return 74;
+}
+
+function initialPreviewWindow(): QuotaWindow {
+  return new URLSearchParams(window.location.search).get("quotaWindow") === "fiveHour" ? "fiveHour" : "weekly";
+}
+
+function initialPreviewLanguage(): Language {
+  return new URLSearchParams(window.location.search).get("language") === "zh-CN" ? "zh-CN" : "en";
 }
 
 export function DesignPlayground() {
   const [values, setValues] = useState(defaults);
   const [previewMode, setPreviewMode] = useState<PreviewMode>(() => initialPreviewMode());
+  const [previewWindow, setPreviewWindow] = useState<QuotaWindow>(() => initialPreviewWindow());
   const params = new URLSearchParams(window.location.search);
   const screenshotMode = params.has("shot");
   const shotKind = params.get("shot");
   const showCreditTip = params.has("creditTip");
+  const previewLanguage = initialPreviewLanguage();
   const style = useMemo(() => ({
     "--card-radius": `${values.radius}px`,
     "--number-size": `${values.numberSize}px`,
@@ -70,10 +82,19 @@ export function DesignPlayground() {
   const makePreview = (mode: PreviewMode): ProviderSnapshot => {
     if (mode === "orb") return preview;
     if (typeof mode === "number") {
-      return { ...preview, weeklyWindow: preview.weeklyWindow ? { ...preview.weeklyWindow, remainingPercent: mode } : null };
+      return {
+        ...preview,
+        weeklyWindow: preview.weeklyWindow ? { ...preview.weeklyWindow, remainingPercent: mode } : null,
+        fiveHourWindow: preview.fiveHourWindow ? { ...preview.fiveHourWindow, remainingPercent: mode } : null,
+      };
     }
     if (mode === "stale") {
       return { ...preview, status: "stale", updatedAt: new Date(Date.now() - 2 * 60 * 60_000).toISOString(), message: "Refresh failed. Please try again later." };
+    }
+    if (mode === "missing_window") {
+      return previewWindow === "fiveHour"
+        ? { ...preview, fiveHourWindow: null, message: null }
+        : { ...preview, weeklyWindow: null, message: null };
     }
     return {
       ...preview,
@@ -84,7 +105,8 @@ export function DesignPlayground() {
     };
   };
 
-  const activePreview = useMemo<ProviderSnapshot>(() => makePreview(previewMode), [previewMode]);
+  const activePreview = useMemo<ProviderSnapshot>(() => makePreview(previewMode), [previewMode, previewWindow]);
+  const previewPreferences: WidgetPreferences = { ...preferences, language: previewLanguage, quotaWindow: previewWindow };
 
   const update = <K extends keyof Values>(key: K, value: Values[K]) => setValues((current) => ({ ...current, [key]: value }));
 
@@ -94,7 +116,7 @@ export function DesignPlayground() {
         <div className="screenshot-stage screenshot-stage--states" style={style}>
           {[74, 35, 8].map((mode) => (
             <div className="design-card-frame" key={mode}>
-              <QuotaCard snapshot={makePreview(mode as PreviewMode)} preferences={preferences} providerCount={1} onPrevious={() => {}} onNext={() => {}} onTogglePin={() => {}} onLanguage={() => {}} onHover={() => {}} onToggleExpanded={() => {}} isConsuming={mode === 35} />
+              <QuotaCard snapshot={makePreview(mode as PreviewMode)} preferences={previewPreferences} providerCount={1} onPrevious={() => {}} onNext={() => {}} onTogglePin={() => {}} onLanguage={() => {}} onHover={() => {}} onRefresh={() => {}} onToggleExpanded={() => {}} isConsuming={mode === 35} />
             </div>
           ))}
         </div>
@@ -105,8 +127,8 @@ export function DesignPlayground() {
       <div className="screenshot-stage" style={style}>
         <div className={previewMode === "orb" ? "design-orb-frame" : "design-card-frame"}>
           {previewMode === "orb"
-            ? <QuotaOrb snapshot={activePreview} language="en" onHover={() => {}} onToggleExpanded={() => {}} />
-            : <QuotaCard snapshot={activePreview} preferences={preferences} providerCount={1} onPrevious={() => {}} onNext={() => {}} onTogglePin={() => {}} onLanguage={() => {}} onHover={() => {}} onToggleExpanded={() => {}} initialShowCreditTip={showCreditTip} />}
+            ? <QuotaOrb snapshot={activePreview} language={previewLanguage} quotaWindow={previewWindow} onHover={() => {}} onToggleExpanded={() => {}} />
+            : <QuotaCard snapshot={activePreview} preferences={previewPreferences} providerCount={1} onPrevious={() => {}} onNext={() => {}} onTogglePin={() => {}} onLanguage={() => {}} onHover={() => {}} onRefresh={() => {}} onToggleExpanded={() => {}} initialShowCreditTip={showCreditTip} />}
         </div>
       </div>
     );
@@ -119,11 +141,13 @@ export function DesignPlayground() {
           {previewModes.map((mode) => (
             <button key={mode.value} className={previewMode === mode.value ? "is-active" : ""} onClick={() => setPreviewMode(mode.value)}>{mode.label}</button>
           ))}
+          <button className={previewWindow === "weekly" ? "is-active" : ""} onClick={() => setPreviewWindow("weekly")}>1w <span>Weekly</span></button>
+          <button className={previewWindow === "fiveHour" ? "is-active" : ""} onClick={() => setPreviewWindow("fiveHour")}>5h <span>5-hour</span></button>
         </div>
         <div className={previewMode === "orb" ? "design-orb-frame" : "design-card-frame"}>
           {previewMode === "orb"
-            ? <QuotaOrb snapshot={activePreview} onHover={() => {}} onToggleExpanded={() => {}} />
-            : <QuotaCard snapshot={activePreview} preferences={preferences} providerCount={1} onPrevious={() => {}} onNext={() => {}} onTogglePin={() => {}} onLanguage={() => {}} onHover={() => {}} onToggleExpanded={() => {}} />}
+            ? <QuotaOrb snapshot={activePreview} language={previewLanguage} quotaWindow={previewWindow} onHover={() => {}} onToggleExpanded={() => {}} />
+            : <QuotaCard snapshot={activePreview} preferences={previewPreferences} providerCount={1} onPrevious={() => {}} onNext={() => {}} onTogglePin={() => {}} onLanguage={() => {}} onHover={() => {}} onRefresh={() => {}} onToggleExpanded={() => {}} />}
         </div>
       </section>
       <aside className="design-controls">

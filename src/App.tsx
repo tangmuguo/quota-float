@@ -1,12 +1,43 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { QuotaCard, QuotaOrb } from "./components/QuotaCard";
 import { fetchSnapshots, getPreferences, listenDesktopEvents, setWidgetExpanded, updatePreferences } from "./lib/bridge";
 import { needsFastRefresh } from "./lib/format";
 import { copy, nextLanguage, normalizeLanguage } from "./lib/i18n";
 import { mergeSnapshots } from "./lib/snapshots";
-import type { ProviderSnapshot, WidgetPreferences } from "./types";
+import { normalizeQuotaWindow, type ProviderSnapshot, type QuotaWindow, type WidgetPreferences } from "./types";
 
-const DEFAULT_PREFS: WidgetPreferences = { panelVisible: true, expanded: true, alwaysOnTop: true, pinnedProvider: null, autoRotateSeconds: 12, language: "zh-CN" };
+const DEFAULT_PREFS: WidgetPreferences = { panelVisible: true, expanded: true, alwaysOnTop: true, pinnedProvider: null, autoRotateSeconds: 12, language: "zh-CN", quotaWindow: "weekly" };
+
+function normalizePreferences(value: Partial<WidgetPreferences> | null | undefined): WidgetPreferences {
+  return {
+    ...DEFAULT_PREFS,
+    ...(value ?? {}),
+    quotaWindow: normalizeQuotaWindow(value?.quotaWindow),
+    language: normalizeLanguage(value?.language),
+  };
+}
+
+function consumptionKey(provider: string, quotaWindow: QuotaWindow): string {
+  return `${provider}:${quotaWindow}`;
+}
+
+function clearConsumptionKey(
+  key: string,
+  previousRemaining: Map<string, number>,
+  consumptionTimers: Map<string, number>,
+  setConsumingProviders: Dispatch<SetStateAction<Set<string>>>,
+) {
+  previousRemaining.delete(key);
+  const timer = consumptionTimers.get(key);
+  if (timer !== undefined) window.clearTimeout(timer);
+  consumptionTimers.delete(key);
+  setConsumingProviders((current) => {
+    if (!current.has(key)) return current;
+    const next = new Set(current);
+    next.delete(key);
+    return next;
+  });
+}
 
 type OperationErrorKey =
   | "settingsReadFailed"
@@ -25,7 +56,7 @@ export default function App() {
   const failures = useRef(0);
   const resizeInFlight = useRef(false);
   const focusAfterResize = useRef<boolean | null>(null);
-  const previousWeekly = useRef(new Map<string, number>());
+  const previousRemaining = useRef(new Map<string, number>());
   const consumptionTimers = useRef(new Map<string, number>());
   const language = normalizeLanguage(preferences.language);
   const t = copy[language];
@@ -38,34 +69,44 @@ export default function App() {
       if (hasFailure) failures.current += 1;
       else failures.current = 0;
       for (const item of values) {
-        const nextWeekly = item.weeklyWindow?.remainingPercent;
-        const previous = previousWeekly.current.get(item.provider);
-        if (nextWeekly !== undefined && previous !== undefined && nextWeekly < previous) {
-          setConsumingProviders((current) => new Set(current).add(item.provider));
-          const oldTimer = consumptionTimers.current.get(item.provider);
-          if (oldTimer !== undefined) window.clearTimeout(oldTimer);
-          const timer = window.setTimeout(() => {
-            setConsumingProviders((current) => { const next = new Set(current); next.delete(item.provider); return next; });
-            consumptionTimers.current.delete(item.provider);
-          }, 5 * 60_000);
-          consumptionTimers.current.set(item.provider, timer);
+        const windows: Array<[QuotaWindow, number | undefined]> = [
+          ["weekly", item.weeklyWindow?.remainingPercent],
+          ["fiveHour", item.fiveHourWindow?.remainingPercent],
+        ];
+        for (const [quotaWindow, nextRemaining] of windows) {
+          const key = consumptionKey(item.provider, quotaWindow);
+          if (item.status === "signed_out" || (item.status === "ok" && nextRemaining === undefined)) {
+            clearConsumptionKey(key, previousRemaining.current, consumptionTimers.current, setConsumingProviders);
+            continue;
+          }
+          if (item.status !== "ok" || nextRemaining === undefined || !Number.isFinite(nextRemaining)) continue;
+          const previous = previousRemaining.current.get(key);
+          if (previous !== undefined && nextRemaining < previous) {
+            setConsumingProviders((current) => new Set(current).add(key));
+            const oldTimer = consumptionTimers.current.get(key);
+            if (oldTimer !== undefined) window.clearTimeout(oldTimer);
+            const timer = window.setTimeout(() => {
+              setConsumingProviders((current) => { const next = new Set(current); next.delete(key); return next; });
+              consumptionTimers.current.delete(key);
+            }, 5 * 60_000);
+            consumptionTimers.current.set(key, timer);
+          }
+          previousRemaining.current.set(key, nextRemaining);
         }
-        if (nextWeekly !== undefined) previousWeekly.current.set(item.provider, nextWeekly);
       }
       setSnapshots((current) => mergeSnapshots(current, values));
     } catch {
       failures.current += 1;
       setSnapshots((current) => current.length > 0
         ? current.map((item) => ({ ...item, status: "stale", message: "Refresh failed. Please try again later." }))
-        : [{ provider: "codex", displayName: "CODEX", plan: null, weeklyWindow: null, resetCredits: null, resetCreditExpiresAt: [], updatedAt: new Date().toISOString(), status: "unavailable", message: "Quota is temporarily unavailable. It will retry automatically." }]);
+        : [{ provider: "codex", displayName: "CODEX", plan: null, weeklyWindow: null, fiveHourWindow: null, resetCredits: null, resetCreditExpiresAt: [], updatedAt: new Date().toISOString(), status: "unavailable", message: "Quota is temporarily unavailable. It will retry automatically." }]);
     }
   }, []);
 
   useEffect(() => {
     void refresh(true);
     void getPreferences().then((value) => {
-      const next = { ...DEFAULT_PREFS, ...value, language: normalizeLanguage(value.language) };
-      setPreferences(next);
+      setPreferences(normalizePreferences(value));
     }).catch(() => setOperationError("settingsReadFailed"));
     return () => { for (const timer of consumptionTimers.current.values()) window.clearTimeout(timer); consumptionTimers.current.clear(); };
   }, [refresh]);
@@ -74,8 +115,7 @@ export default function App() {
     let cancelled = false;
     let cleanup: () => void = () => {};
     void listenDesktopEvents({ onPreferences: (value) => {
-      const next = { ...DEFAULT_PREFS, ...value, language: normalizeLanguage(value.language) };
-      setPreferences(next);
+      setPreferences(normalizePreferences(value));
     }, onRefresh: () => void refresh(true) }).then((value) => {
       if (cancelled) value(); else cleanup = value;
     }).catch(() => setOperationError("desktopEventsFailed"));
@@ -139,7 +179,7 @@ export default function App() {
     void setWidgetExpanded(expanded)
       .then((next) => {
         focusAfterResize.current = next.expanded;
-        setPreferences({ ...DEFAULT_PREFS, ...next, language: normalizeLanguage(next.language) });
+        setPreferences(normalizePreferences(next));
       })
       .catch((error) => {
         focusAfterResize.current = !expanded;
@@ -186,7 +226,7 @@ export default function App() {
           onLanguage={() => savePreferences({ ...preferences, language: nextLanguage(language) })}
           onHover={() => {}}
           onRefresh={() => refresh(true)}
-          isConsuming={consumingProviders.has(current.provider)}
+          isConsuming={consumingProviders.has(consumptionKey(current.provider, preferences.quotaWindow))}
           notice={operationErrorMessage}
           onToggleExpanded={() => changeExpanded(false)}
           resizeDisabled={resizing}
@@ -196,6 +236,7 @@ export default function App() {
         <QuotaOrb
           snapshot={current}
           language={language}
+          quotaWindow={preferences.quotaWindow}
           onHover={() => {}}
           onToggleExpanded={() => changeExpanded(true)}
           resizeDisabled={resizing}

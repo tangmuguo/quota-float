@@ -15,6 +15,7 @@ pub struct ProviderSnapshot {
     pub display_name: String,
     pub plan: Option<String>,
     pub weekly_window: Option<UsageWindow>,
+    pub five_hour_window: Option<UsageWindow>,
     pub reset_credits: Option<u64>,
     pub reset_credit_expires_at: Vec<String>,
     pub updated_at: String,
@@ -29,6 +30,7 @@ impl ProviderSnapshot {
             display_name: "CODEX".into(),
             plan: None,
             weekly_window: None,
+            five_hour_window: None,
             reset_credits: None,
             reset_credit_expires_at: Vec::new(),
             updated_at: chrono::Utc::now().to_rfc3339(),
@@ -51,6 +53,8 @@ pub struct WidgetPreferences {
     pub auto_rotate_seconds: u64,
     #[serde(default = "default_language")]
     pub language: String,
+    #[serde(default = "default_quota_window")]
+    pub quota_window: String,
 }
 
 fn default_always_on_top() -> bool {
@@ -65,6 +69,9 @@ fn default_expanded() -> bool {
 fn default_language() -> String {
     "zh-CN".into()
 }
+fn default_quota_window() -> String {
+    "weekly".into()
+}
 
 impl Default for WidgetPreferences {
     fn default() -> Self {
@@ -75,6 +82,7 @@ impl Default for WidgetPreferences {
             pinned_provider: None,
             auto_rotate_seconds: 12,
             language: default_language(),
+            quota_window: default_quota_window(),
         }
     }
 }
@@ -88,6 +96,9 @@ impl WidgetPreferences {
         if self.language != "en" && self.language != "zh-CN" {
             self.language = default_language();
         }
+        if self.quota_window != "weekly" && self.quota_window != "fiveHour" {
+            self.quota_window = default_quota_window();
+        }
         self
     }
 }
@@ -98,7 +109,7 @@ mod tests {
 
     #[test]
     fn older_preferences_ignore_and_remove_the_retired_lock_setting() {
-        let preferences: WidgetPreferences = serde_json::from_str(
+        let preferences = serde_json::from_str::<WidgetPreferences>(
             r#"{"locked":true,"alwaysOnTop":true,"pinnedProvider":null,"autoRotateSeconds":12,"language":"zh-CN"}"#,
         )
         .expect("older settings should remain readable");
@@ -106,7 +117,36 @@ mod tests {
         assert!(preferences.panel_visible);
         assert!(preferences.expanded);
         assert!(preferences.always_on_top);
+        assert_eq!(preferences.quota_window, "weekly");
         let serialized = serde_json::to_value(preferences).expect("settings should serialize");
         assert!(serialized.get("locked").is_none());
+        assert_eq!(
+            serialized
+                .get("quotaWindow")
+                .and_then(|value| value.as_str()),
+            Some("weekly")
+        );
+    }
+
+    #[test]
+    fn invalid_quota_window_falls_back_to_weekly() {
+        let preferences = serde_json::from_str::<WidgetPreferences>(
+            r#"{"quotaWindow":"daily","alwaysOnTop":true,"pinnedProvider":null,"autoRotateSeconds":12,"language":"zh-CN"}"#,
+        )
+        .expect("settings with a future quota window should remain readable")
+        .normalized();
+
+        assert_eq!(preferences.quota_window, "weekly");
+    }
+
+    #[test]
+    fn five_hour_quota_window_survives_normalization() {
+        let preferences = serde_json::from_str::<WidgetPreferences>(
+            r#"{"quotaWindow":"fiveHour","alwaysOnTop":true,"pinnedProvider":null,"autoRotateSeconds":12,"language":"zh-CN"}"#,
+        )
+        .expect("five-hour quota selection should be readable")
+        .normalized();
+
+        assert_eq!(preferences.quota_window, "fiveHour");
     }
 }

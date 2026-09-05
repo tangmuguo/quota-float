@@ -10,6 +10,9 @@ const USAGE_URL: &str = "https://chatgpt.com/backend-api/wham/usage";
 const CREDITS_URL: &str = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits";
 const MAX_RESPONSE_BYTES: u64 = 1024 * 1024;
 const MAX_AUTH_BYTES: u64 = 256 * 1024;
+const FIVE_HOUR_WINDOW_SECONDS: u64 = 18_000;
+const WEEKLY_WINDOW_SECONDS: u64 = 604_800;
+const WINDOW_DURATION_TOLERANCE_SECONDS: u64 = 60;
 
 struct Auth {
     access_token: String,
@@ -228,67 +231,207 @@ fn parse_window(value: Option<&Value>) -> Option<UsageWindow> {
     })
 }
 
+fn normalized_window_name(value: &str) -> String {
+    value
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric())
+        .map(|character| character.to_ascii_lowercase())
+        .collect()
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WindowNameMatch {
+    None,
+    Generic,
+    Specific,
+}
+
+fn matches_window_name(value: &str, names: &[&str]) -> WindowNameMatch {
+    let value = normalized_window_name(value);
+    if value.is_empty()
+        || !names.iter().any(|name| {
+            let name = normalized_window_name(name);
+            !name.is_empty() && value.contains(&name)
+        })
+    {
+        return WindowNameMatch::None;
+    }
+
+    if [
+        "week",
+        "weekly",
+        "weekwindow",
+        "weeklywindow",
+        "fivehour",
+        "fivehours",
+        "fivehourwindow",
+    ]
+    .iter()
+    .any(|name| value.contains(name))
+    {
+        WindowNameMatch::Specific
+    } else {
+        WindowNameMatch::Generic
+    }
+}
+
+fn matches_window_duration(window: &UsageWindow, expected_seconds: u64) -> bool {
+    expected_seconds > 0
+        && window.window_seconds > 0
+        && window.window_seconds.abs_diff(expected_seconds) <= WINDOW_DURATION_TOLERANCE_SECONDS
+}
+
+fn push_window_candidate<'a>(
+    candidates: &mut Vec<WindowCandidate<'a>>,
+    value: &'a Value,
+    name: Option<&str>,
+    names: &[&str],
+) {
+    if parse_window(Some(value)).is_some() {
+        let name_match = name
+            .map(|name| matches_window_name(name, names))
+            .unwrap_or(WindowNameMatch::None);
+        candidates.push(WindowCandidate { value, name_match });
+    }
+}
+
+struct WindowCandidate<'a> {
+    value: &'a Value,
+    name_match: WindowNameMatch,
+}
+
+fn collect_window_collection<'a>(
+    collection: &'a Value,
+    names: &[&str],
+    candidates: &mut Vec<WindowCandidate<'a>>,
+) {
+    match collection {
+        Value::Array(items) => {
+            for item in items {
+                let item_name = pick_string(item, &["name", "type", "id", "window", "label"]);
+                push_window_candidate(candidates, item, item_name, names);
+            }
+        }
+        Value::Object(items) => {
+            for (key, item) in items {
+                push_window_candidate(candidates, item, Some(key), names);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn is_window_collection_key(key: &str) -> bool {
+    matches!(
+        normalized_window_name(key).as_str(),
+        "windows" | "limitwindows" | "limits" | "buckets"
+    )
+}
+
 fn find_window<'a>(
     rate_limit: &'a Value,
     names: &[&str],
     expected_seconds: u64,
 ) -> Option<&'a Value> {
-    for name in names {
-        if let Some(value) = rate_limit.get(*name) {
-            if parse_window(Some(value)).is_some() {
-                return Some(value);
+    let mut candidates = Vec::new();
+    if parse_window(Some(rate_limit)).is_some() {
+        candidates.push(WindowCandidate {
+            value: rate_limit,
+            name_match: WindowNameMatch::None,
+        });
+    }
+
+    if let Some(object) = rate_limit.as_object() {
+        for (key, value) in object {
+            if is_window_collection_key(key) {
+                collect_window_collection(value, names, &mut candidates);
+            } else {
+                push_window_candidate(&mut candidates, value, Some(key), names);
             }
         }
+    } else {
+        collect_window_collection(rate_limit, names, &mut candidates);
     }
 
     // The service has used both primary_window and secondary_window for the
-    // weekly allowance. Prefer the actual seven-day duration over the label so
-    // a server-side rename does not make the quota disappear again.
+    // weekly allowance. Prefer an actual duration over a label so a server-side
+    // rename or swap cannot make the two quota windows appear in the wrong slot.
     if expected_seconds > 0 {
-        if let Some(object) = rate_limit.as_object() {
-            for value in object.values() {
-                let Some(window) = parse_window(Some(value)) else {
-                    continue;
-                };
-                if window.window_seconds.abs_diff(expected_seconds) <= 60 {
-                    return Some(value);
-                }
+        if let Some(candidate) = candidates.iter().find(|candidate| {
+            parse_window(Some(candidate.value))
+                .is_some_and(|window| matches_window_duration(&window, expected_seconds))
+        }) {
+            return Some(candidate.value);
+        }
+
+        let has_explicit_duration = candidates.iter().any(|candidate| {
+            parse_window(Some(candidate.value)).is_some_and(|window| window.window_seconds > 0)
+        });
+        if has_explicit_duration {
+            // A descriptive period name remains unambiguous when an older or
+            // mixed response omits its duration. Generic primary/secondary
+            // labels remain ambiguous once another candidate has a duration.
+            if let Some(candidate) = candidates.iter().find(|candidate| {
+                candidate.name_match == WindowNameMatch::Specific
+                    && parse_window(Some(candidate.value))
+                        .is_some_and(|window| window.window_seconds == 0)
+            }) {
+                return Some(candidate.value);
             }
+            return None;
         }
     }
 
-    for key in [
-        "windows",
-        "limit_windows",
-        "limitWindows",
-        "limits",
-        "buckets",
-    ] {
-        let Some(items) = rate_limit.get(key).and_then(Value::as_array) else {
-            continue;
-        };
-        for item in items {
-            let Some(window) = parse_window(Some(item)) else {
-                continue;
-            };
-            let matches_duration =
-                expected_seconds > 0 && window.window_seconds.abs_diff(expected_seconds) <= 60;
-            let matches_name = pick_string(item, &["name", "type", "id", "window", "label"])
-                .map(|text| {
-                    let lower = text.to_ascii_lowercase();
-                    names.iter().any(|name| {
-                        lower == name.to_ascii_lowercase()
-                            || lower.contains(&name.to_ascii_lowercase())
-                    })
-                })
-                .unwrap_or(false);
-            if matches_duration || matches_name {
-                return Some(item);
-            }
-        }
-    }
+    candidates.into_iter().find_map(|candidate| {
+        (candidate.name_match != WindowNameMatch::None).then_some(candidate.value)
+    })
+}
 
-    None
+fn parse_period_window(
+    rate_limit: &Value,
+    names: &[&str],
+    expected_seconds: u64,
+) -> Option<UsageWindow> {
+    let mut window = parse_window(find_window(rate_limit, names, expected_seconds))?;
+    if window.window_seconds == 0 {
+        // A named legacy window has no duration in the payload, but its slot
+        // still identifies the period. Preserve that information for callers.
+        window.window_seconds = expected_seconds;
+    }
+    Some(window)
+}
+
+fn parse_quota_windows(rate_limit: &Value) -> (Option<UsageWindow>, Option<UsageWindow>) {
+    let five_hour_window = parse_period_window(
+        rate_limit,
+        &[
+            "primary_window",
+            "primaryWindow",
+            "five_hour_window",
+            "fiveHourWindow",
+            "five_hours",
+            "fiveHours",
+            "five_hour",
+            "fiveHour",
+            "primary",
+        ],
+        FIVE_HOUR_WINDOW_SECONDS,
+    );
+    let weekly_window = parse_period_window(
+        rate_limit,
+        &[
+            "secondary_window",
+            "secondaryWindow",
+            "weekly_window",
+            "weeklyWindow",
+            "week_window",
+            "weekWindow",
+            "weekly",
+            "secondary",
+        ],
+        WEEKLY_WINDOW_SECONDS,
+    );
+    (weekly_window, five_hour_window)
 }
 
 fn safe_http_failure(status: reqwest::StatusCode) -> (&'static str, &'static str) {
@@ -360,24 +503,11 @@ pub async fn fetch_snapshot(client: &reqwest::Client) -> ProviderSnapshot {
         .get("rate_limit")
         .or_else(|| usage.get("rateLimit"))
         .unwrap_or(&usage);
-    let weekly_window = parse_window(find_window(
-        rate_limit,
-        &[
-            "secondary_window",
-            "secondaryWindow",
-            "weekly_window",
-            "weeklyWindow",
-            "week_window",
-            "weekWindow",
-            "weekly",
-            "secondary",
-        ],
-        604_800,
-    ));
-    if weekly_window.is_none() {
+    let (weekly_window, five_hour_window) = parse_quota_windows(rate_limit);
+    if weekly_window.is_none() && five_hour_window.is_none() {
         return ProviderSnapshot::failure(
             "unavailable",
-            "Quota response is missing the weekly window.",
+            "Quota response is missing a quota window.",
         );
     }
 
@@ -433,6 +563,7 @@ pub async fn fetch_snapshot(client: &reqwest::Client) -> ProviderSnapshot {
         display_name: "CODEX".into(),
         plan: pick_string(&usage, &["plan_type", "planType"]).map(|value| value.to_uppercase()),
         weekly_window,
+        five_hour_window,
         reset_credits,
         reset_credit_expires_at,
         updated_at: chrono::Utc::now().to_rfc3339(),
@@ -535,6 +666,80 @@ mod tests {
         .unwrap();
         assert_eq!(short.remaining_percent, 51.0);
         assert_eq!(weekly.remaining_percent, 88.0);
+    }
+
+    #[test]
+    fn identifies_windows_by_duration_when_primary_and_secondary_are_swapped() {
+        let rate_limit = serde_json::json!({
+            "primary_window": {
+                "used_percent": 11,
+                "limit_window_seconds": 604800
+            },
+            "secondary_window": {
+                "used_percent": 22,
+                "limit_window_seconds": 18000
+            }
+        });
+
+        let (weekly, five_hour) = parse_quota_windows(&rate_limit);
+        let weekly = weekly.expect("weekly duration should win over the field name");
+        let five_hour = five_hour.expect("five-hour duration should win over the field name");
+        assert_eq!(weekly.remaining_percent, 89.0);
+        assert_eq!(weekly.window_seconds, WEEKLY_WINDOW_SECONDS);
+        assert_eq!(five_hour.remaining_percent, 78.0);
+        assert_eq!(five_hour.window_seconds, FIVE_HOUR_WINDOW_SECONDS);
+    }
+
+    #[test]
+    fn does_not_use_a_named_window_with_the_wrong_duration() {
+        let rate_limit = serde_json::json!({
+            "primary_window": {
+                "remaining_percent": 51,
+                "window_seconds": 604800
+            }
+        });
+
+        assert!(find_window(
+            &rate_limit,
+            &["primary_window", "primary"],
+            FIVE_HOUR_WINDOW_SECONDS,
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn keeps_a_snapshot_usable_when_only_one_window_is_present() {
+        let rate_limit = serde_json::json!({
+            "primary_window": {
+                "remainingPercent": 63,
+                "windowSeconds": 18000
+            }
+        });
+
+        let (weekly, five_hour) = parse_quota_windows(&rate_limit);
+        assert!(weekly.is_none());
+        assert_eq!(five_hour.unwrap().remaining_percent, 63.0);
+    }
+
+    #[test]
+    fn uses_a_descriptive_name_for_a_missing_duration_in_a_mixed_response() {
+        let rate_limit = serde_json::json!({
+            "primary_window": {
+                "remainingPercent": 70,
+                "windowSeconds": 18000
+            },
+            "weekly_window": {
+                "remainingPercent": 40
+            }
+        });
+
+        let (weekly, five_hour) = parse_quota_windows(&rate_limit);
+        let weekly = weekly.expect("weekly_window should remain available");
+        let five_hour = five_hour.expect("primary five-hour window should remain available");
+        assert_eq!(weekly.remaining_percent, 40.0);
+        assert_eq!(weekly.window_seconds, WEEKLY_WINDOW_SECONDS);
+        assert_eq!(five_hour.remaining_percent, 70.0);
+        assert_eq!(five_hour.window_seconds, FIVE_HOUR_WINDOW_SECONDS);
     }
 
     #[test]

@@ -1,4 +1,4 @@
-import type { Language } from "../types";
+import type { Language, QuotaWindow } from "../types";
 
 export const DEFAULT_LANGUAGE: Language = "zh-CN";
 
@@ -6,7 +6,7 @@ export const copy = {
   "zh-CN": {
     accountFallback: "ACCOUNT",
     active: "正在消耗额度",
-    availableLabel: (percent: number) => `本周额度剩余 ${percent}%`,
+    availableLabel: (percent: number, quotaWindow: QuotaWindow = "weekly") => `${quotaWindow === "fiveHour" ? "5 小时" : "本周"}额度剩余 ${percent}%`,
     controls: "悬浮窗控制",
     collapsePanel: "缩小额度面板",
     creditExpiresUnknown: "到期时间未知",
@@ -37,20 +37,24 @@ export const copy = {
     serviceNext: "下一个服务",
     settingsReadFailed: "无法读取设置，已使用默认设置。",
     settingsSaveFailed: "设置保存失败，已恢复之前的状态。",
-    shortRemaining: "本周剩余",
+    shortRemaining: (quotaWindow: QuotaWindow = "weekly") => quotaWindow === "fiveHour" ? "5 小时剩余" : "本周剩余",
     signedInRequired: "请先登录 Codex",
     staleExpired: "额度数据已过期",
     switchLanguage: "Switch to English",
     temporarilyUnavailable: "暂时无法读取",
     unavailableStatus: "暂时无法读取额度",
     view: "查看",
+    windowMissing: (quotaWindow: QuotaWindow) => `${quotaWindow === "fiveHour" ? "5 小时" : "每周"}额度窗口暂不可用，请稍后刷新。`,
+    windowName: (quotaWindow: QuotaWindow) => quotaWindow === "fiveHour" ? "5 小时额度" : "一周额度",
+    windowShort: (quotaWindow: QuotaWindow) => quotaWindow === "fiveHour" ? "5h" : "1w",
     weeklyRemaining: "本周剩余",
     weeklyUntil: (date: string) => `本周剩余 · 至 ${date}`,
+    windowUntil: (quotaWindow: QuotaWindow, date: string) => `${quotaWindow === "fiveHour" ? "5 小时剩余" : "本周剩余"} · 至 ${date}`,
   },
   en: {
     accountFallback: "ACCOUNT",
     active: "Quota in use",
-    availableLabel: (percent: number) => `Weekly quota remaining ${percent}%`,
+    availableLabel: (percent: number, quotaWindow: QuotaWindow = "weekly") => `${quotaWindow === "fiveHour" ? "5-hour" : "Weekly"} quota remaining ${percent}%`,
     controls: "Floating widget controls",
     collapsePanel: "Collapse quota panel",
     creditExpiresUnknown: "Expiration unknown",
@@ -81,15 +85,19 @@ export const copy = {
     serviceNext: "Next service",
     settingsReadFailed: "Unable to read settings. Defaults are in use.",
     settingsSaveFailed: "Settings could not be saved. Previous state restored.",
-    shortRemaining: "Weekly remaining",
+    shortRemaining: (quotaWindow: QuotaWindow = "weekly") => quotaWindow === "fiveHour" ? "5-hour remaining" : "Weekly remaining",
     signedInRequired: "Sign in to Codex",
     staleExpired: "Quota data expired",
     switchLanguage: "Switch to Chinese",
     temporarilyUnavailable: "Unavailable",
     unavailableStatus: "Quota temporarily unavailable",
     view: "View",
+    windowMissing: (quotaWindow: QuotaWindow) => `${quotaWindow === "fiveHour" ? "5-hour" : "Weekly"} quota window is unavailable. Try refreshing shortly.`,
+    windowName: (quotaWindow: QuotaWindow) => quotaWindow === "fiveHour" ? "5-hour quota" : "Weekly quota",
+    windowShort: (quotaWindow: QuotaWindow) => quotaWindow === "fiveHour" ? "5h" : "1w",
     weeklyRemaining: "Weekly remaining",
     weeklyUntil: (date: string) => `Weekly remaining · until ${date}`,
+    windowUntil: (quotaWindow: QuotaWindow, date: string) => `${quotaWindow === "fiveHour" ? "5-hour remaining" : "Weekly remaining"} · until ${date}`,
   },
 } as const;
 
